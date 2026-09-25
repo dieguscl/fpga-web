@@ -7,6 +7,48 @@
 - Pod security: non-root (uid 10001), all capabilities dropped, no privilege escalation, `hostUsers: false` (own user namespace) and `procMount: Unmasked` so bubblewrap can mount a fresh `/proc` for each sandboxed build (the Docker equivalent used by `scripts/check_container.sh` is `--security-opt systempaths=unconfined`).
 - Build isolation: each tool runs in bubblewrap. Ubuntu 24.04 blocks unprivileged user namespaces for unconfined processes, so the pod runs under the AppArmor profile `fpgaweb-bwrap` (`deploy/apparmor/`), which only adds the `userns` permission. No host-wide sysctl is changed.
 
+## Security trade-offs
+
+The pod runs with three permissive settings that would normally be a red
+flag, all required for bubblewrap to build a nested user namespace and a
+fresh `/proc` per sandboxed build step:
+
+- `seccompProfile: {type: Unconfined}` -- no syscall filter on the container.
+- `appArmorProfile` `fpgaweb-bwrap` (`deploy/apparmor/`) -- effectively
+  unconfined; it only adds the `userns` permission Ubuntu 24.04 otherwise
+  blocks for unprivileged processes.
+- `securityContext.procMount: Unmasked` -- lets bubblewrap mount its own
+  `/proc`.
+
+This is mitigated, not eliminated, by: `hostUsers: false` (the pod gets its
+own user namespace, so root inside a nested userns is not root on the node),
+non-root (`runAsUser: 10001`, `runAsNonRoot: true`), all Linux capabilities
+dropped (`capabilities: {drop: [ALL]}`), and no privilege escalation
+(`allowPrivilegeEscalation: false`). In short: a memory-corruption bug in
+yosys/nextpnr/etc, running inside bubblewrap, gets the full syscall surface
+of an unprivileged, capability-less, non-root process in its own user and
+mount namespace -- not the full surface of the node.
+
+Follow-ups, in rough priority order:
+- Pass a seccomp filter to bwrap itself (`--seccomp FD`), blocking `keyctl`,
+  `bpf`, `userfaultfd`, `perf_event_open`, `add_key` and nested `unshare`,
+  so the *sandboxed tool* (not just the pod) has a narrower syscall surface
+  than "whatever an unprivileged process can call".
+- `automountServiceAccountToken: false` on the pod spec -- done now, it's
+  free (this pod never calls the Kubernetes API).
+- Cloudflare SSL mode "Full (strict)" with a Cloudflare Origin CA cert in a
+  Traefik TLS secret, instead of "Flexible" (plaintext to origin) or "Full"
+  (encrypted but unverified) -- either of the latter two lets a
+  Cloudflare-to-origin man-in-the-middle tamper with uploaded source or
+  downloaded bitstreams.
+- Pin the OSS CAD Suite tarball to a checksum (`docker/Dockerfile`) instead
+  of trusting GitHub's TLS alone; every other toolchain dependency is
+  already pinned this way.
+- Re-attach the UI to a still-running job after a page reload (store
+  `{projectId, jobId}` in `sessionStorage`; the server already supports
+  replaying events via `from`), so a lost tab doesn't strand a job the
+  user can't see or cancel and then bump into the "1 active job" limit.
+
 ## Verify an image before deploying
 ```bash
 DOCKER_RUN_ARGS=--network=host scripts/check_container.sh fpga-web:<tag>   # 7 real builds + sandbox tests inside the image

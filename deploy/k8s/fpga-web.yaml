@@ -33,6 +33,9 @@ spec:
       # Own user namespace for the pod, so bubblewrap (nested userns) may mount a fresh /proc
       # for each sandboxed build; procMount Unmasked below requires it.
       hostUsers: false
+      # This pod never calls the Kubernetes API, so it doesn't need its own
+      # ServiceAccount token mounted; a free reduction in blast radius.
+      automountServiceAccountToken: false
       securityContext:
         runAsUser: 10001
         runAsGroup: 10001
