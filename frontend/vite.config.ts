@@ -13,7 +13,12 @@ const yowaspGen = fileURLToPath(new URL('./node_modules/@yowasp/openfpgaloader/g
 export default defineConfig({
   optimizeDeps: { exclude: ['@yowasp/openfpgaloader'] },
   ssr: { external: ['@yowasp/openfpgaloader'] },
-  resolve: { alias: [{ find: `${yowaspGen}openFPGALoader.mjs`, replacement: `${yowaspGen}bundle.js` }] },
+  resolve: {
+    alias: [
+      { find: `${yowaspGen}openFPGALoader.mjs`, replacement: `${yowaspGen}bundle.js` },
+      ...(process.env.VITEST ? [{ find: '@yowasp/openfpgaloader', replacement: fileURLToPath(new URL('./tests/mocks/openfpgaloader.ts', import.meta.url)) }] : []),
+    ],
+  },
   assetsInclude: ['**/*.wasm'],
   server: { proxy: { '/api': 'http://127.0.0.1:8000' } },
   build: { target: 'es2022' },
