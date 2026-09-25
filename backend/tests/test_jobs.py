@@ -198,6 +198,14 @@ async def test_sweep_removes_expired_jobs(settings, registry):
         await m.stop()
 
 
+async def test_job_files_cleared_after_planning(make, registry):
+    m = await make(FakeRunner())
+    job = m.submit("ip", registry.get("icebreaker"), "main", FILES, lint=False)
+    await drain(job)
+    assert job.state is JobState.DONE
+    assert job.files == {}
+
+
 async def test_build_log_line_includes_duration(make, registry, caplog):
     import logging
     import re

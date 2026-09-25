@@ -252,6 +252,11 @@ class JobManager:
                 return self._fail(job, str(e))
 
         plan = self._plan(job.board, job.top, job.files, self._s, chipdb_path, job.lint)
+        # job.files (up to 1 MB) is no longer needed once planning has read
+        # it: the sources are already on disk and the plan only references
+        # file names, not their contents. Drop it instead of holding it in
+        # memory until the job is swept at job_ttl_s.
+        job.files = {}
         for name, text in plan.extra_files.items():
             (job.dir / name).write_text(text, encoding="utf-8")
 
