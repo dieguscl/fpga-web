@@ -1,6 +1,7 @@
 """HTTP API: boards, build submission, SSE job events, bitstream download, SPA."""
 
 import asyncio
+import ipaddress
 import json
 from contextlib import asynccontextmanager
 
@@ -110,6 +111,22 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
+def _normalise_ip(ip: str) -> str:
+    """Key IPv6 clients by their /64, so per-IP limits can't be trivially
+    bypassed by rotating within the /64 a residential or mobile ISP routes to
+    a single customer. IPv4 addresses are returned as-is (a /32 is already
+    one host), and anything that doesn't parse as an IP address (e.g. the
+    ASGI test client's "testclient" placeholder) is also returned as-is.
+    """
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if addr.version == 6:
+        return str(ipaddress.ip_network(f"{ip}/64", strict=False))
+    return ip
+
+
 def _board_json(b: Board) -> dict:
     fp = flash_plan(b)
     return {"id": b.id, "description": b.description, "arch": b.arch, "part": b.part_num,
@@ -134,11 +151,12 @@ def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
         if settings.trust_proxy:
             cf = request.headers.get("cf-connecting-ip")
             if cf:
-                return cf.strip()
+                return _normalise_ip(cf.strip())
             fwd = request.headers.get("x-forwarded-for")
             if fwd:
-                return fwd.split(",")[0].strip()
-        return request.client.host if request.client else "unknown"
+                return _normalise_ip(fwd.split(",")[0].strip())
+        host = request.client.host if request.client else "unknown"
+        return _normalise_ip(host)
 
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=MAX_BODY)
     app.add_middleware(SecurityHeadersMiddleware)

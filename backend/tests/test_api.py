@@ -208,6 +208,29 @@ async def test_cf_connecting_ip_preferred(client):
     gate.set()
 
 
+async def test_ipv6_clients_in_same_64_share_active_job_limit(client):
+    import asyncio
+    gate = asyncio.Event()
+    c = await client(runner=FakeRunner(gate=gate), trust_proxy=True)
+    h1 = {"CF-Connecting-IP": "2001:db8:1234:5678::1"}
+    h2 = {"CF-Connecting-IP": "2001:db8:1234:5678:aaaa:bbbb:cccc:dddd"}
+    assert (await c.post("/api/build", json=BODY, headers=h1)).status_code == 202
+    r = await c.post("/api/build", json=BODY, headers=h2)
+    assert r.status_code == 429 and "already" in r.json()["detail"]
+    gate.set()
+
+
+async def test_ipv6_clients_in_different_64_have_separate_limits(client):
+    import asyncio
+    gate = asyncio.Event()
+    c = await client(runner=FakeRunner(gate=gate), trust_proxy=True)
+    h1 = {"CF-Connecting-IP": "2001:db8:1234:5678::1"}
+    h2 = {"CF-Connecting-IP": "2001:db8:1234:5679::1"}
+    assert (await c.post("/api/build", json=BODY, headers=h1)).status_code == 202
+    assert (await c.post("/api/build", json=BODY, headers=h2)).status_code == 202
+    gate.set()
+
+
 async def test_sse_heartbeat_while_queued(settings, registry):
     # NOTE: deviates from a plain `client` fixture call. httpx.ASGITransport
     # runs the whole ASGI app to completion inside a single `await
