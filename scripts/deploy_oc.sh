@@ -4,6 +4,27 @@ set -euo pipefail
 HOST="${1:-oc}"
 TAG="${2:-$(git rev-parse --short HEAD)}"
 cd "$(dirname "$0")/.."
+
+# A dirty tree would ship uncommitted changes labelled as HEAD's short SHA;
+# redeploying the same tag after further edits also wouldn't roll the pod,
+# since the spec is unchanged. Refuse by default; FORCE_DIRTY=1 opts in and
+# gets a tag suffix so it's still a distinct, rollable image.
+if [ -n "$(git status --porcelain)" ]; then
+  if [ "${FORCE_DIRTY:-0}" = "1" ]; then
+    TAG="${TAG}-dirty-$(date +%s)"
+  else
+    echo "refusing to deploy: working tree is dirty (commit/stash changes, or set FORCE_DIRTY=1 to deploy anyway)" >&2
+    exit 1
+  fi
+fi
+
+# For testing the dirty-tree/tag logic above without touching the host or
+# building an image: DEPLOY_OC_DRY_RUN=1 prints the resolved TAG and exits.
+if [ "${DEPLOY_OC_DRY_RUN:-0}" = "1" ]; then
+  echo "TAG=$TAG"
+  exit 0
+fi
+
 rsync -az --delete --exclude node_modules --exclude .venv --exclude frontend/dist --exclude .git --exclude .superpowers --exclude .omc --exclude "*.egg-info" ./ "$HOST:fpga-web/"
 ssh "$HOST" bash -s <<EOF
 set -euo pipefail
