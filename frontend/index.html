@@ -3,40 +3,70 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#070E1D" />
   <title>FPGA Web IDE</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 29 9.5v13L16 30 3 22.5v-13z' fill='%2369F6B8'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
   <div id="banner" hidden></div>
-  <header>
-    <strong>FPGA Web IDE</strong>
-    <select id="project" aria-label="Project" disabled></select>
-    <button id="new-project" disabled>New</button>
-    <button id="import" disabled>Import .zip</button>
-    <button id="export" disabled>Export .zip</button>
-    <span class="sep"></span>
-    <select id="board" aria-label="Board" disabled></select>
-    <label>Top <input id="top" size="12" /></label>
-    <label><input type="checkbox" id="lint" checked /> Lint</label>
-    <button id="build" class="primary" disabled>Build</button>
-    <button id="flash" disabled>Flash</button>
-    <label><input type="checkbox" id="to-flash" /> Write to flash</label>
-    <a id="download" hidden>Download</a>
-    <button id="help">USB setup</button>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 2 29 9.5v13L16 30 3 22.5v-13z" />
+        <path class="brand-core" d="M11 11h10v10H11z" />
+      </svg>
+      <div class="brand-text">
+        <span class="brand-name">FPGA<span class="brand-accent">WEB</span></span>
+        <span class="label">Build · Flash · Ship</span>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="label">Project</span>
+      <div class="row">
+        <select id="project" aria-label="Project" disabled></select>
+        <button id="new-project" class="btn-ghost" disabled>New</button>
+        <button id="import" class="btn-ghost" disabled>Import</button>
+        <button id="export" class="btn-ghost" disabled>Export</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="label">Target</span>
+      <div class="row">
+        <select id="board" aria-label="Board" disabled></select>
+        <label class="field"><span class="label">Top</span><input id="top" size="10" spellcheck="false" /></label>
+      </div>
+    </div>
+
+    <button id="help" class="btn-ghost btn-icon" title="USB setup for flashing" aria-label="USB setup">USB setup</button>
   </header>
+
   <main>
-    <aside>
+    <aside class="panel panel-files">
+      <div class="panel-head"><span class="label">Files</span></div>
       <ul id="file-list"></ul>
-      <button id="add-file" disabled>+ File</button>
+      <button id="add-file" class="btn-ghost btn-block" disabled>+ New file</button>
     </aside>
-    <section id="editor"></section>
-    <section id="output">
+    <section id="editor" class="panel panel-editor"></section>
+    <section id="output" class="panel panel-output">
+      <div class="panel-head"><span class="label">Output</span></div>
+      <div class="actions">
+        <button id="build" class="btn-primary" disabled>Build</button>
+        <button id="flash" class="btn-tertiary" disabled>Flash</button>
+        <a id="download" class="btn-ghost" hidden>Download</a>
+        <span class="actions-gap"></span>
+        <label class="check"><input type="checkbox" id="lint" checked /><span>Lint</span></label>
+        <label class="check" title="Write to the board's flash memory so the design survives power-off"><input type="checkbox" id="to-flash" /><span>Persist</span></label>
+      </div>
       <div id="status">Ready</div>
       <div id="summary"></div>
       <pre id="log"></pre>
     </section>
   </main>
-  <dialog id="setup-help"><div id="setup-help-body"></div><form method="dialog"><button>Close</button></form></dialog>
+
+  <dialog id="setup-help" class="hex-crop"><div id="setup-help-body"></div><form method="dialog"><button class="btn-primary">Close</button></form></dialog>
   <input type="file" id="import-file" accept=".zip" hidden />
   <script type="module" src="/src/main.ts"></script>
 </body>

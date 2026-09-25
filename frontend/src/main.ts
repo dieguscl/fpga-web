@@ -1,3 +1,9 @@
+import '@fontsource/space-grotesk/500.css';
+import '@fontsource/space-grotesk/700.css';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/jetbrains-mono/400.css';
 import { ApiError, fetchBitstream, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent } from './api';
 import { Editor } from './editor';
 import { parseLocations } from './errors';
@@ -214,9 +220,25 @@ function appendLog(line: string) {
 }
 
 function renderSummary(ev: Extract<BuildEvent, { type: 'done' }>) {
-  const parts = Object.entries(ev.summary.utilization).map(([k, u]) => `${k} ${u.used}/${u.available}`);
-  const fmax = Object.entries(ev.summary.fmax).map(([k, f]) => `fmax ${k}: ${f} MHz`);
-  $('summary').textContent = [...parts, ...fmax].join(' · ');
+  // Metric chips built with textContent only (resource/clock names come from tool output).
+  const chip = (cls: string, value: string, name: string) => {
+    const el = document.createElement('div');
+    el.className = `metric ${cls}`;
+    const v = document.createElement('span');
+    v.className = 'value';
+    v.textContent = value;
+    const n = document.createElement('span');
+    n.className = 'name';
+    n.textContent = name;
+    n.title = name;
+    el.append(v, n);
+    return el;
+  };
+  const chips = [
+    ...Object.entries(ev.summary.fmax).map(([k, f]) => chip('fmax', `${f} MHz`, `fmax ${k}`)),
+    ...Object.entries(ev.summary.utilization).map(([k, u]) => chip('util', `${u.used}/${u.available}`, k)),
+  ];
+  $('summary').replaceChildren(...chips);
 }
 
 async function build() {
