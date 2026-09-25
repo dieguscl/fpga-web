@@ -25,10 +25,34 @@ def flash_plan(board: Board) -> FlashPlan:
     usb = board.usb or {}
 
     if kind == "openfpgaloader":
-        args = [
-            a.replace("${VID}", usb.get("vid", "")).replace("${PID}", usb.get("pid", ""))
-            for a in shlex.split(extra)
-        ]
+        parsed = shlex.split(extra)
+        # Drop --busdev-num and its following value
+        filtered = []
+        skip_next = False
+        for arg in parsed:
+            if skip_next:
+                skip_next = False
+                continue
+            if arg == "--busdev-num":
+                skip_next = True
+                continue
+            filtered.append(arg)
+        # Substitute VID/PID placeholders
+        args = []
+        for a in filtered:
+            # For placeholders like --vid ${VID}, add 0x prefix if not already present
+            if a == "${VID}":
+                a = f"0x{usb.get('vid', '')}"
+            elif a == "${PID}":
+                a = f"0x{usb.get('pid', '')}"
+            else:
+                # For placeholders within a larger string like 0x${VID}, replace without prefix
+                a = a.replace("${VID}", usb.get("vid", ""))
+                a = a.replace("${PID}", usb.get("pid", ""))
+            args.append(a)
+        # Check for unresolved placeholders
+        if any("${" in a for a in args):
+            return _DOWNLOAD
         return FlashPlan("browser", args, any(a in _FLASH_FLAGS for a in args))
     if kind == "iceprog":
         if extra:

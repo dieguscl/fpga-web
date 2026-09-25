@@ -42,6 +42,19 @@ def test_unsupported_programmer_is_download_only(registry):
     assert p.mode == "download" and p.args == []
 
 
+def test_busdev_placeholder_is_dropped(registry):
+    b = registry.get("alhambra-ii")
+    p = flash_plan(b)
+    assert p.mode == "browser"
+    assert p.args == ["-b", "ice40_generic", "--vid", f"0x{b.usb['vid']}", "--pid", f"0x{b.usb['pid']}"]
+
+
+def test_no_board_has_unresolved_placeholders(registry):
+    for b in registry.all():
+        p = flash_plan(b)
+        assert not any("${" in arg for arg in p.args), f"board {b.id} has unresolved placeholders in {p.args}"
+
+
 def test_most_boards_flash_in_browser(registry):
     modes = [flash_plan(b).mode for b in registry.all()]
-    assert modes.count("browser") >= 90
+    assert modes.count("browser") >= 91
