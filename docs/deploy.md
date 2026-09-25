@@ -24,3 +24,7 @@ The script re-loads the AppArmor profile each time (after a reboot the profile i
 - Chipdb cache: PVC `chipdb` (~100–200 MB per Xilinx part, downloaded on first use).
 - Bump toolchains: change `OSS_CAD_DATE` / `OPENXC7_COMMIT` in `docker/Dockerfile`; when bumping openXC7 also re-vendor `XILINX-PARTS-INDEX.json` from the matching Apio openxc7 package (`scripts/vendor_apio_defs.sh`) so chipdb downloads match.
 - Old images: `ssh oc 'sudo k3s crictl images | grep fpga-web'`, remove with `sudo k3s crictl rmi <id>`; `docker image prune` for the build cache.
+
+## Measured build times (A1, 2026-09-25)
+- basys3 (Xilinx, first build incl. chipdb download, lint on): 10.3 s end to end through Cloudflare.
+- In-image integration suite on oc (basys3, icebreaker, ulx3s-85f, sipeed-tang-nano-9k + include/syntax tests): 7 passed in 20.2 s.
