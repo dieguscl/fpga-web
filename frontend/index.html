@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FPGA Web IDE</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="banner" hidden></div>
+  <header>
+    <strong>FPGA Web IDE</strong>
+    <select id="project" aria-label="Project" disabled></select>
+    <button id="new-project" disabled>New</button>
+    <button id="import" disabled>Import .zip</button>
+    <button id="export" disabled>Export .zip</button>
+    <span class="sep"></span>
+    <select id="board" aria-label="Board" disabled></select>
+    <label>Top <input id="top" size="12" /></label>
+    <label><input type="checkbox" id="lint" checked /> Lint</label>
+    <button id="build" class="primary" disabled>Build</button>
+    <button id="flash" disabled>Flash</button>
+    <label><input type="checkbox" id="to-flash" /> Write to flash</label>
+    <a id="download" hidden>Download</a>
+    <button id="help">USB setup</button>
+  </header>
+  <main>
+    <aside>
+      <ul id="file-list"></ul>
+      <button id="add-file" disabled>+ File</button>
+    </aside>
+    <section id="editor"></section>
+    <section id="output">
+      <div id="status">Ready</div>
+      <div id="summary"></div>
+      <pre id="log"></pre>
+    </section>
+  </main>
+  <dialog id="setup-help"><div id="setup-help-body"></div><form method="dialog"><button>Close</button></form></dialog>
+  <input type="file" id="import-file" accept=".zip" hidden />
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

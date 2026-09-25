@@ -1,0 +1,25 @@
+:root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d2d2d7; --accent: #0a66c2; --err: #b3261e; --ok: #1b7f3b; }
+@media (prefers-color-scheme: dark) { :root { --bg: #16161a; --fg: #e8e8ed; --muted: #9a9aa2; --line: #33333a; --accent: #5aa2ff; --err: #ff8a80; --ok: #7ddc9a; } }
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px system-ui, sans-serif; background: var(--bg); color: var(--fg); height: 100vh; display: flex; flex-direction: column; }
+header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+header .sep { flex: 1; }
+button, select, input { font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button:disabled { opacity: .5; }
+main { flex: 1; display: grid; grid-template-columns: 180px 1fr 38%; min-height: 0; }
+aside { border-right: 1px solid var(--line); padding: 8px; overflow: auto; }
+#file-list { list-style: none; margin: 0 0 8px; padding: 0; }
+#file-list li { padding: 4px 6px; border-radius: 4px; cursor: pointer; display: flex; justify-content: space-between; }
+#file-list li.active { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+#file-list li button { border: none; padding: 0 4px; color: var(--muted); }
+#editor { min-height: 0; overflow: hidden; }
+#editor .cm-editor { height: 100%; }
+#output { border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+#status { padding: 8px; border-bottom: 1px solid var(--line); }
+#status.ok { color: var(--ok); } #status.err { color: var(--err); }
+#summary { padding: 0 8px; font-size: 12px; color: var(--muted); }
+#log { flex: 1; margin: 0; padding: 8px; overflow: auto; font: 12px ui-monospace, monospace; white-space: pre-wrap; }
+#log a.loc { color: var(--accent); cursor: pointer; }
+#banner { padding: 8px 12px; background: color-mix(in srgb, var(--err) 15%, transparent); }
+@media (max-width: 800px) { main { grid-template-columns: 1fr; grid-template-rows: auto 50vh auto; } aside, #output { border: none; } }
