@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { buildOflArgs } from '../src/flasher';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { buildOflArgs, flash } from '../src/flasher';
 import { detectOS, setupHelpHtml } from '../src/setup-help';
 import type { BoardInfo } from '../src/api';
 
@@ -32,5 +32,42 @@ describe('setup help', () => {
     expect(setupHelpHtml('linux')).toContain('udev');
     expect(setupHelpHtml('windows')).toContain('Zadig');
     expect(setupHelpHtml('windows')).toMatch(/Vivado/);
+  });
+  it('includes all 7 vendor IDs in Linux udev rules', () => {
+    const linux = setupHelpHtml('linux');
+    expect(linux).toContain('0403'); // FTDI
+    expect(linux).toContain('09fb'); // Altera USB-Blaster
+    expect(linux).toContain('0d28'); // ARM CMSIS-DAP, Colorlight
+    expect(linux).toContain('1209'); // pid.codes DFU
+    expect(linux).toContain('1d50'); // OpenMoko DFU
+    expect(linux).toContain('2a19'); // Numato
+    expect(linux).toContain('c251'); // Keil CMSIS-DAP
+  });
+});
+
+describe('flash', () => {
+  let originalNavigator: Navigator;
+
+  beforeEach(() => {
+    originalNavigator = globalThis.navigator;
+  });
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: originalNavigator,
+      configurable: true,
+    });
+  });
+
+  it('rejects download-only boards without calling requestDevice', async () => {
+    const requestDeviceMock = vi.fn();
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { usb: { requestDevice: requestDeviceMock } },
+      configurable: true,
+    });
+
+    const downloadOnlyBoard = board({ flash: 'download' });
+    await expect(flash(downloadOnlyBoard, new Uint8Array(), false, () => {})).rejects.toThrow(/download/);
+    expect(requestDeviceMock).not.toHaveBeenCalled();
   });
 });

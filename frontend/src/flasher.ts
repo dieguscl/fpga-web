@@ -14,21 +14,23 @@ export function buildOflArgs(board: BoardInfo, fileName: string, toFlash: boolea
 export async function flash(board: BoardInfo, bitstream: Uint8Array, toFlash: boolean,
                             onLog: (text: string) => void): Promise<void> {
   if (!webUsbSupported()) throw new Error('This browser has no WebUSB. Use Chrome or Edge, or download the bitstream.');
+  const fileName = `${board.id}${board.bitstream_ext}`;
+  const args = buildOflArgs(board, fileName, toFlash);
   const { runOpenFPGALoader } = await import('@yowasp/openfpgaloader');
   try {
     await navigator.usb.requestDevice({ filters: runOpenFPGALoader.requiresUSBDevice as USBDeviceFilter[] });
   } catch {
     throw new Error('No USB device selected.');
   }
-  const fileName = `${board.id}${board.bitstream_ext}`;
   const decoder = new TextDecoder();
   const out = (bytes: Uint8Array | null) => {
     if (bytes) onLog(decoder.decode(bytes, { stream: true }));
   };
   try {
-    await runOpenFPGALoader(buildOflArgs(board, fileName, toFlash), { [fileName]: bitstream }, { stdout: out, stderr: out });
+    await runOpenFPGALoader(args, { [fileName]: bitstream }, { stdout: out, stderr: out });
   } catch (e) {
     const code = (e as { code?: number }).code;
-    throw new Error(code !== undefined ? `openFPGALoader exited with code ${code}` : String(e));
+    const message = code !== undefined ? `openFPGALoader exited with code ${code}` : String(e);
+    throw e instanceof Error ? new Error(message) : new Error(message);
   }
 }

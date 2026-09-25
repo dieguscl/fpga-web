@@ -8,11 +8,20 @@ export function detectOS(ua: string = navigator.userAgent): OS {
 }
 
 const UDEV = `sudo tee /etc/udev/rules.d/70-fpga-webusb.rules >/dev/null <<'EOF'
-# FTDI (Digilent, iCE40 boards, ...), CMSIS-DAP, DFU bootloaders
+# FTDI (Digilent, iCE40 boards, ...)
 SUBSYSTEM=="usb", ATTRS{idVendor}=="0403", MODE="0666"
-SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50", MODE="0666"
-SUBSYSTEM=="usb", ATTRS{idVendor}=="c251", MODE="0666"
+# Altera USB-Blaster
+SUBSYSTEM=="usb", ATTRS{idVendor}=="09fb", MODE="0666"
+# ARM CMSIS-DAP, Colorlight
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0d28", MODE="0666"
+# pid.codes DFU boards
 SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", MODE="0666"
+# OpenMoko DFU
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50", MODE="0666"
+# Numato
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2a19", MODE="0666"
+# Keil CMSIS-DAP
+SUBSYSTEM=="usb", ATTRS{idVendor}=="c251", MODE="0666"
 EOF
 sudo udevadm control --reload-rules && sudo udevadm trigger`;
 
