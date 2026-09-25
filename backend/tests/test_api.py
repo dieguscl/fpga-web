@@ -270,6 +270,20 @@ async def test_static_spa_served(client, tmp_path):
     assert r.status_code == 200 and "hi" in r.text
 
 
+async def test_cross_origin_isolation_headers(client, tmp_path):
+    # Required so the browser considers the page cross-origin isolated
+    # (crossOriginIsolated === true), which @yowasp/openfpgaloader's shared
+    # WebAssembly.Memory needs -- must be present on the static SPA shell
+    # (the top-level document) as well as on API responses.
+    (tmp_path / "web").mkdir()
+    (tmp_path / "web" / "index.html").write_text("<h1>hi</h1>")
+    c = await client(static_dir=tmp_path / "web")
+    for path in ("/", "/api/boards"):
+        r = await c.get(path)
+        assert r.headers["cross-origin-opener-policy"] == "same-origin"
+        assert r.headers["cross-origin-embedder-policy"] == "require-corp"
+
+
 # --- Controller ruling: bitstream endpoint must not serve a symlink ---
 
 

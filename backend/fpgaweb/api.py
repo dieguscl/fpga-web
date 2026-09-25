@@ -75,6 +75,41 @@ class BodySizeLimitMiddleware:
         await self.app(scope, counted_receive, send)
 
 
+class SecurityHeadersMiddleware:
+    """Pure-ASGI middleware adding COOP/COEP headers to every HTTP response.
+
+    Required for in-browser flashing: @yowasp/openfpgaloader's wasm bundle
+    allocates a `SharedArrayBuffer`-backed `WebAssembly.Memory` for its
+    pthread worker, which browsers only permit when the page is cross-origin
+    isolated (`window.crossOriginIsolated === true`). That requires both
+    `Cross-Origin-Opener-Policy: same-origin` and
+    `Cross-Origin-Embedder-Policy: require-corp` on the top-level document's
+    response -- so this covers every response, including the static SPA
+    shell (`/`) and the API, not just one route.
+    Implemented as raw ASGI (like `BodySizeLimitMiddleware` above), not
+    `@app.middleware("http")`/`BaseHTTPMiddleware`, so it adds headers to
+    streaming responses (the SSE job-events endpoint) by rewriting the
+    `http.response.start` message instead of buffering the whole response.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.append((b"cross-origin-opener-policy", b"same-origin"))
+                headers.append((b"cross-origin-embedder-policy", b"require-corp"))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
 def _board_json(b: Board) -> dict:
     fp = flash_plan(b)
     return {"id": b.id, "description": b.description, "arch": b.arch, "part": b.part_num,
@@ -106,6 +141,7 @@ def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
         return request.client.host if request.client else "unknown"
 
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=MAX_BODY)
+    app.add_middleware(SecurityHeadersMiddleware)
 
     @app.get("/api/boards")
     async def boards() -> list[dict]:
