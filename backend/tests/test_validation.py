@@ -36,6 +36,11 @@ def test_bad_extension_rejected(basys3):
         validate_files(basys3, "main", ok(**{"run.sh": "echo"}))
 
 
+def test_uppercase_extension_rejected(basys3):
+    with pytest.raises(ValidationError, match="lower-case"):
+        validate_files(basys3, "main", ok(**{"Extra.V": V}))
+
+
 def test_too_many_files(basys3):
     files = ok(**{f"m{i}.v": "" for i in range(49)})
     with pytest.raises(ValidationError, match="50 files"):

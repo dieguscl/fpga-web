@@ -22,6 +22,11 @@ def _ext(name: str) -> str:
     return name[dot:].lower() if dot > 0 else ""
 
 
+def _raw_ext(name: str) -> str:
+    dot = name.rfind(".")
+    return name[dot:] if dot > 0 else ""
+
+
 def is_testbench(name: str) -> bool:
     return _ext(name) in DESIGN_EXTS and name.rsplit(".", 1)[0].endswith("_tb")
 
@@ -42,8 +47,11 @@ def validate_files(board: Board, top: str, files: dict[str, str]) -> dict[str, s
     for name, text in files.items():
         if not NAME_RE.fullmatch(name):
             raise ValidationError(f"invalid file name: {name!r}")
-        if _ext(name) not in ALLOWED_EXTS:
+        ext = _ext(name)
+        if ext not in ALLOWED_EXTS:
             raise ValidationError(f"file extension not allowed: {name!r}")
+        if _raw_ext(name) != ext:
+            raise ValidationError(f"file extension must be lower-case: {name!r}")
         if "\x00" in text:
             raise ValidationError(f"{name} looks binary (contains NUL bytes)")
         total += len(text.encode("utf-8"))
