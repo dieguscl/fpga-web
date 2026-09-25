@@ -3760,7 +3760,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 15: Container image (multi-arch toolchains), k3s manifests, AppArmor profile
 
 **Files:**
-- Create: `docker/Dockerfile`, `.dockerignore`, `deploy/apparmor/fpgaweb-bwrap`, `deploy/k8s/fpga-web.yaml`, `scripts/check_container.sh`
+- Create: `docker/Dockerfile`, `docker/openxc7-env.nix`, `.dockerignore`, `deploy/apparmor/fpgaweb-bwrap`, `deploy/k8s/fpga-web.yaml`, `scripts/check_container.sh`
 
 **Interfaces:**
 - Consumes: backend package, `frontend/dist` (built in-image), Settings defaults (`/opt/fpga/...`, `/var/lib/fpgaweb/...`).
@@ -3781,19 +3781,16 @@ frontend/dist
 ```dockerfile
 # syntax=docker/dockerfile:1.7
 
-# ---- openXC7 (nextpnr-xilinx, prjxray, fasm, prjxray-db) built with Nix ----
+# ---- openXC7 (nextpnr-xilinx, prjxray, fasm python env, prjxray-db) built with Nix ----
 FROM nixos/nix:2.24.9 AS openxc7
 ARG OPENXC7_COMMIT=8a01b11b7bac1e66c01d44f43c3a5290f65981a7
 RUN git clone https://github.com/fpgawars/tools-openxc7 /src \
  && cd /src && git checkout ${OPENXC7_COMMIT}
-WORKDIR /src
-RUN nix --extra-experimental-features 'nix-command flakes' build \
-      .#nextpnr-xilinx .#prjxray .#fasm .#prjxray-db --out-link /out/r \
- && mkdir -p /closure \
- && cp -a $(nix-store -qR /out/r*) /closure/ \
- && mkdir -p /opt/fpga/bin \
- && for d in /out/r*/bin; do for f in "$d"/*; do ln -sf "$(readlink -f "$f")" /opt/fpga/bin/; done; done \
- && ln -s "$(readlink -f /out/r-3)" /opt/fpga/prjxray-db-src
+COPY docker/openxc7-env.nix /openxc7-env.nix
+RUN nix --extra-experimental-features 'nix-command flakes' build --impure -f /openxc7-env.nix -o /out \
+ && mkdir -p /closure /opt/fpga \
+ && cp -a $(nix-store -qR /out) /closure/ \
+ && cp -a "$(readlink -f /out)"/. /opt/fpga/
 
 # ---- OSS CAD Suite (yosys, nextpnr-ice40/ecp5/himbaechel, packers, verilator) ----
 FROM debian:bookworm-slim AS osscad
@@ -3820,7 +3817,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=openxc7 /closure /nix/store
 COPY --from=openxc7 /opt/fpga/bin /opt/fpga/bin
-COPY --from=openxc7 /opt/fpga/prjxray-db-src /opt/fpga/prjxray-db
+COPY --from=openxc7 /opt/fpga/prjxray-db /opt/fpga/prjxray-db
 COPY --from=osscad /opt/oss-cad-suite /opt/fpga/oss-cad-suite
 COPY backend/ /app/backend/
 RUN python3 -m venv /app/venv && /app/venv/bin/pip install --no-cache-dir '/app/backend[dev]'
@@ -3834,7 +3831,31 @@ EXPOSE 8000
 CMD ["/app/venv/bin/uvicorn", "fpgaweb.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
 ```
 
-Note on `--out-link /out/r`: with 4 installables Nix creates `/out/r`, `/out/r-1`, `/out/r-2`, `/out/r-3` in argument order, so `/out/r-3` is `prjxray-db`. Step 3 verifies this layout.
+`docker/openxc7-env.nix` (the pinned tools-openxc7 commit has no standalone `prjxray-db` package — the database ships inside nextpnr-xilinx at `share/nextpnr/external/prjxray-db` — and `fasm2frames` is a Python script that needs prjxray + fasm on `PYTHONPATH`; this file builds exactly the three tools the recipes call plus the database link):
+```nix
+# openXC7 tool environment, pinned through the tools-openxc7 flake checked out at /src.
+# Produces: bin/{nextpnr-xilinx,xc7frames2bit,fasm2frames} and prjxray-db/ (symlinks into /nix/store).
+let
+  flake = builtins.getFlake "git+file:///src";
+  system = builtins.currentSystem;
+  p = flake.packages.${system};
+  pkgs = flake.inputs.nixpkgs.legacyPackages.${system};
+  py = pkgs.python312.withPackages (ps: with ps; [ pyyaml textx simplejson intervaltree sortedcontainers arpeggio ]);
+  sitePackages = pkg: "${pkg}/${pkgs.python312.sitePackages}";
+in
+pkgs.runCommand "openxc7-tools" { } ''
+  mkdir -p $out/bin
+  ln -s ${p.nextpnr-xilinx}/bin/nextpnr-xilinx $out/bin/
+  ln -s ${p.prjxray}/bin/xc7frames2bit $out/bin/
+  cat > $out/bin/fasm2frames <<'EOF'
+  #!${pkgs.runtimeShell}
+  export PYTHONPATH=${p.prjxray}/usr/share/python3:${sitePackages p.fasm}
+  exec ${py}/bin/python3 ${p.prjxray}/bin/fasm2frames "$@"
+  EOF
+  chmod +x $out/bin/fasm2frames
+  ln -s ${p.nextpnr-xilinx}/share/nextpnr/external/prjxray-db $out/prjxray-db
+''
+```
 
 - [ ] **Step 2: AppArmor profile and Kubernetes manifest**
 
@@ -3956,8 +3977,8 @@ cd ~/projects/fpga-web/frontend && npm install --package-lock-only
 cd ~/projects/fpga-web && docker build -f docker/Dockerfile -t fpga-web:dev . 2>&1 | tail -20
 docker run --rm fpga-web:dev bash -c 'ls /opt/fpga/bin; ls /opt/fpga/prjxray-db; yosys -V; nextpnr-xilinx --version 2>&1 | head -1' 
 ```
-Expected: `/opt/fpga/bin` lists `nextpnr-xilinx`, `fasm2frames`, `xc7frames2bit` (plus others); `/opt/fpga/prjxray-db` lists `artix7 kintex7 spartan7 zynq7`; yosys prints a version. The Nix build takes 20–60 min the first time.
-If `fasm2frames` or `xc7frames2bit` is missing from `/opt/fpga/bin`, locate them with `docker run --rm fpga-web:dev bash -c 'find /nix/store -name "fasm2frames*" -o -name "xc7frames2bit*"'` and add explicit `ln -sf` lines for those paths in the openxc7 stage. If `/opt/fpga/prjxray-db` has no `artix7`, change `/out/r-3` to the out-link whose `ls` shows `artix7`.
+Expected: `/opt/fpga/bin` lists exactly `fasm2frames nextpnr-xilinx xc7frames2bit`; `/opt/fpga/prjxray-db` lists `artix7 kintex7 spartan7 zynq7` (plus db metadata); yosys prints a version. The Nix build takes 20–60 min the first time.
+Also run `docker run --rm fpga-web:dev fasm2frames --help | head -3` — it must print usage (proves the Python environment resolves `prjxray` and `fasm`).
 
 - [ ] **Step 4: Container check script**
 
