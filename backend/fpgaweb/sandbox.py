@@ -2,9 +2,11 @@
 
 import asyncio
 import contextlib
+import fcntl
 import os
 import resource
 import signal
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, Callable
@@ -55,21 +57,36 @@ def _kill_group(proc: asyncio.subprocess.Process) -> None:
 
 
 def _open_stdout_file(cwd: Path, name: str) -> BinaryIO:
-    """Open cwd/name for the step's stdout, refusing to follow a symlink.
+    """Open cwd/name for the step's stdout, refusing anything but a plain file.
 
     A prior sandboxed step could have planted a symlink at this name pointing
-    outside the job directory (e.g. into the backend's own writable files).
-    The name must be a plain filename (no path separators, not "." or "..")
-    and the open itself must fail rather than follow an existing symlink.
+    outside the job directory (e.g. into the backend's own writable files), or
+    a FIFO/device node: opening a FIFO with no reader would otherwise block
+    the backend's event loop forever, and a reader-primed FIFO or a device
+    node would silently redirect the write. The name must be a plain filename
+    (no path separators, not "." or "..") and the open itself must fail
+    rather than follow a symlink, block on a FIFO, or write to a non-regular
+    file.
     """
     if "/" in name or name in (".", ".."):
         raise ValueError(f"invalid stdout_file name: {name!r}")
     fd = os.open(
         cwd / name,
-        os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_CLOEXEC,
+        os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK,
         0o644,
     )
-    return os.fdopen(fd, "wb")
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError(f"stdout_file must be a regular file: {name!r}")
+        # O_NONBLOCK was only needed to make opening a reader-less FIFO fail
+        # fast (ENXIO) instead of blocking; clear it before handing the fd to
+        # the subprocess so writes behave normally.
+        flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, flags & ~os.O_NONBLOCK)
+        return os.fdopen(fd, "wb")
+    except BaseException:
+        os.close(fd)
+        raise
 
 
 def _classify(rc: int, oom: bool) -> str | None:

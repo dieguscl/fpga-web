@@ -172,3 +172,13 @@ async def test_stdout_file_does_not_follow_symlink(tmp_path, tmp_path_factory, s
                         stdout_file="hw.frames")
 
     assert outside.read_text() == "untouched"
+
+
+async def test_stdout_file_fifo_is_rejected(tmp_path, settings):
+    os.mkfifo(tmp_path / "out.txt")
+    with pytest.raises(OSError):
+        await asyncio.wait_for(
+            run_step([PY, "-c", "print('x')"], tmp_path, settings, lambda l: None,
+                     stdout_file="out.txt"),
+            timeout=5,
+        )
