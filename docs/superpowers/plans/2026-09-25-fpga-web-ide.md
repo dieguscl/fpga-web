@@ -3760,7 +3760,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 15: Container image (multi-arch toolchains), k3s manifests, AppArmor profile
 
 **Files:**
-- Create: `docker/Dockerfile`, `docker/openxc7-env.nix`, `.dockerignore`, `deploy/apparmor/fpgaweb-bwrap`, `deploy/k8s/fpga-web.yaml`, `scripts/check_container.sh`
+- Create: `docker/Dockerfile`, `docker/openxc7-env.nix`, `.dockerignore`, `deploy/apparmor/fpgaweb-bwrap`, `deploy/k8s/fpga-web.yaml`, `deploy/k8s/traefik-config.yaml`, `scripts/check_container.sh`
 
 **Interfaces:**
 - Consumes: backend package, `frontend/dist` (built in-image), Settings defaults (`/opt/fpga/...`, `/var/lib/fpgaweb/...`).
@@ -3948,11 +3948,46 @@ spec:
     - port: 80
       targetPort: 8000
 ---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: cloudflare-only
+  namespace: fpga-web
+spec:
+  # Only Cloudflare edge IPs may reach this site (https://www.cloudflare.com/ips/, fetched 2026-09-25),
+  # so CF-Connecting-IP (used for per-IP rate limits) cannot be spoofed by hitting the origin directly.
+  ipAllowList:
+    sourceRange:
+        - 173.245.48.0/20
+        - 103.21.244.0/22
+        - 103.22.200.0/22
+        - 103.31.4.0/22
+        - 141.101.64.0/18
+        - 108.162.192.0/18
+        - 190.93.240.0/20
+        - 188.114.96.0/20
+        - 197.234.240.0/22
+        - 198.41.128.0/17
+        - 162.158.0.0/15
+        - 104.16.0.0/13
+        - 104.24.0.0/14
+        - 172.64.0.0/13
+        - 131.0.72.0/22
+        - 2400:cb00::/32
+        - 2606:4700::/32
+        - 2803:f800::/32
+        - 2405:b500::/32
+        - 2405:8100::/32
+        - 2a06:98c0::/29
+        - 2c0f:f248::/32
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: fpga-web
   namespace: fpga-web
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: fpga-web-cloudflare-only@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
@@ -3967,7 +4002,21 @@ spec:
                 port: {number: 80}
 ```
 
-Validate: `kubectl apply --dry-run=client -f deploy/k8s/fpga-web.yaml` (use `ssh oc sudo k3s kubectl apply --dry-run=client -f -  < deploy/k8s/fpga-web.yaml` if no local kubectl) → 5 resources "created (dry run)".
+`deploy/k8s/traefik-config.yaml` (k3s-managed Traefik: preserve client source IPs so the allowlist sees Cloudflare's addresses; single-node cluster, so `Local` drops no traffic — other Ingresses keep working and now see real client IPs):
+```yaml
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    service:
+      spec:
+        externalTrafficPolicy: Local
+```
+
+Validate: `ssh oc sudo k3s kubectl apply --dry-run=server -f - < deploy/k8s/fpga-web.yaml` → 6 resources "created (server dry run)" (server dry-run needs the namespace: if it complains the namespace is missing, use `--dry-run=client`, which should list 6 resources); same for `deploy/k8s/traefik-config.yaml` (1 resource). Before this change there is no HelmChartConfig in kube-system on oc (verified 2026-09-25), so nothing is overwritten.
 
 - [ ] **Step 3: Build locally (amd64) and verify toolchain layout**
 
@@ -4040,6 +4089,7 @@ sudo cp deploy/apparmor/fpgaweb-bwrap /etc/apparmor.d/fpgaweb-bwrap
 sudo apparmor_parser -r /etc/apparmor.d/fpgaweb-bwrap
 docker build -f docker/Dockerfile -t fpga-web:$TAG .
 docker save fpga-web:$TAG | sudo k3s ctr images import -
+sudo k3s kubectl apply -f deploy/k8s/traefik-config.yaml
 sed 's/fpga-web:IMAGE_TAG/fpga-web:$TAG/' deploy/k8s/fpga-web.yaml | sudo k3s kubectl apply -f -
 sudo k3s kubectl -n fpga-web rollout status deploy/fpga-web --timeout=600s
 EOF
@@ -4066,6 +4116,8 @@ ssh oc 'sudo k3s kubectl -n fpga-web logs deploy/fpga-web --tail=20'
 ssh oc 'sudo k3s kubectl get pods -A | grep -v fpga-web | grep -vE "Running|Completed" || echo "other workloads healthy"'
 ```
 Expected: `109`; uvicorn startup lines without errors; `other workloads healthy` (hexaflex untouched).
+Origin lock check (from the dev machine, i.e. NOT a Cloudflare IP): `curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: fpga.dieguscl.com' http://51.170.58.221/api/boards` → `403`; and `ssh oc 'sudo k3s kubectl -n kube-system get svc traefik -o jsonpath={.spec.externalTrafficPolicy}'` → `Local`; hexaflex still answers: `curl -s -o /dev/null -w '%{http_code}\n' http://hexaflex.51-170-58-221.nip.io/` → same status as before the change (record it before deploying).
+Note: the in-cluster check above (`curl … 127.0.0.1` on oc) now returns 403 too, because 127.0.0.1 is not a Cloudflare IP — use `sudo k3s kubectl -n fpga-web port-forward svc/fpga-web 18080:80` + `curl localhost:18080/api/boards` for in-cluster checks instead.
 Once the user has pointed Cloudflare at the host: `curl -fsS https://fpga.dieguscl.com/api/boards | head -c 200` returns JSON. Then build the basys3 template in Chrome at `https://fpga.dieguscl.com` and confirm "Build succeeded" and a `basys3.bit` download. Record one build time per arch in `docs/deploy.md` under "Measured build times (A1)".
 
 - [ ] **Step 4: Docs**
@@ -4077,6 +4129,7 @@ Once the user has pointed Cloudflare at the host: `curl -fsS https://fpga.diegus
 - Host: Oracle Cloud Ampere A1, Ubuntu 24.04 aarch64, single-node k3s with Traefik on 80/443.
 - Namespace `fpga-web`: Deployment (1 replica), Service, Ingress `fpga.dieguscl.com`, PVC `chipdb` (Xilinx chipdb cache, local-path).
 - Public access: Cloudflare proxied DNS record `fpga.dieguscl.com` → host public IP. SSL mode "Full" (Traefik serves its default certificate on 443) or "Flexible" (HTTP to origin). WebUSB needs the HTTPS that Cloudflare provides.
+- Origin lock: Traefik's Service uses `externalTrafficPolicy: Local` (`deploy/k8s/traefik-config.yaml`) and the Ingress has an `ipAllowList` middleware with Cloudflare's ranges, so only Cloudflare can reach the site and `CF-Connecting-IP` can be trusted. Refresh the ranges from https://www.cloudflare.com/ips/ occasionally.
 - Build isolation: each tool runs in bubblewrap. Ubuntu 24.04 blocks unprivileged user namespaces for unconfined processes, so the pod runs under the AppArmor profile `fpgaweb-bwrap` (`deploy/apparmor/`), which only adds the `userns` permission. No host-wide sysctl is changed.
 
 ## Deploy / update
