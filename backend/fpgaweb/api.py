@@ -4,7 +4,7 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -24,6 +24,55 @@ class BuildBody(BaseModel):
     top: str
     files: dict[str, str]
     lint: bool = True
+
+
+class BodySizeLimitMiddleware:
+    """Pure-ASGI middleware rejecting request bodies over `max_bytes`.
+
+    A `Content-Length` header over the limit is rejected up front, without
+    reading any body. Everything else -- including a chunked body with no
+    `Content-Length` -- is counted as the app itself reads it via `receive`;
+    once the running total exceeds `max_bytes`, an `HTTPException(413)` is
+    raised from inside that `receive` call instead of returning the next
+    chunk, so the app never gets to finish parsing an oversized body.
+    FastAPI's own body-parsing (`fastapi.routing.get_request_handler`) wraps
+    `await request.body()` in a try/except that re-raises `HTTPException` as
+    is but converts *any other* exception to a generic 400 -- so this must
+    raise `HTTPException`, not a custom exception type, to actually surface
+    as 413 instead of being swallowed into a 400.
+    This has to be a raw ASGI middleware (not `@app.middleware("http")` /
+    `BaseHTTPMiddleware`, which only sees whatever `Content-Length` the
+    client claims) to actually stop a chunked-encoded body of unknown size
+    once it exceeds the limit.
+    """
+
+    def __init__(self, app, max_bytes: int):
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        for name, value in scope.get("headers", ()):
+            if name == b"content-length":
+                if value.isdigit() and int(value) > self.max_bytes:
+                    resp = JSONResponse({"detail": "request too large"}, status_code=413)
+                    return await resp(scope, receive, send)
+                break
+
+        total = 0
+
+        async def counted_receive():
+            nonlocal total
+            message = await receive()
+            if message["type"] == "http.request":
+                total += len(message.get("body", b""))
+                if total > self.max_bytes:
+                    raise HTTPException(413, "request too large")
+            return message
+
+        await self.app(scope, counted_receive, send)
 
 
 def _board_json(b: Board) -> dict:
@@ -56,12 +105,7 @@ def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
                 return fwd.split(",")[0].strip()
         return request.client.host if request.client else "unknown"
 
-    @app.middleware("http")
-    async def limit_body(request: Request, call_next):
-        length = request.headers.get("content-length")
-        if length and length.isdigit() and int(length) > MAX_BODY:
-            return JSONResponse({"detail": "request too large"}, status_code=413)
-        return await call_next(request)
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=MAX_BODY)
 
     @app.get("/api/boards")
     async def boards() -> list[dict]:
@@ -87,7 +131,14 @@ def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
             raise HTTPException(400, str(e))
         ip = client_ip(request)
         if manager.active_count(ip) > 0:
-            raise HTTPException(429, "you already have a build running; wait for it to finish")
+            raise HTTPException(429, "you already have a build running; wait for it to finish",
+                               headers={"Retry-After": "10"})
+        # Check queue capacity before spending a rate-limit token: a 503 here
+        # must be free to retry, not counted against the caller's rate limit.
+        # submit() below still re-checks and can still raise QueueFull itself
+        # to cover the race against a concurrent submission.
+        if manager.queue_full():
+            raise HTTPException(503, "build server is busy; try again in a minute")
         if not limiter.allow(ip):
             return JSONResponse({"detail": "too many builds; slow down"}, status_code=429,
                                 headers={"Retry-After": str(limiter.retry_after(ip))})
@@ -98,15 +149,15 @@ def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
         return {"job_id": job.id, "queue_position": job.events[0]["position"]}
 
     @app.get("/api/jobs/{job_id}/events")
-    async def events(job_id: str, request: Request, start: int | None = None):
+    async def events(job_id: str, request: Request,
+                     from_: int = Query(0, alias="from", ge=0)):
         job = manager.get(job_id)
         if job is None:
             raise HTTPException(404, "unknown or expired job")
-        if start is None:
-            start = int(request.query_params.get("from", "0") or 0)
-            last = request.headers.get("last-event-id")
-            if last and last.isdigit():
-                start = int(last) + 1
+        start = from_
+        last = request.headers.get("last-event-id")
+        if last and last.isascii() and last.isdigit():
+            start = int(last) + 1
 
         async def gen():
             it = job.stream(start).__aiter__()

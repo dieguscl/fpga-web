@@ -85,6 +85,26 @@ async def test_sse_resume_last_event_id(client):
     assert sse_events(r.text) == full[4:]
 
 
+async def test_sse_from_query_rejects_non_integer(client):
+    c = await client()
+    job_id = (await c.post("/api/build", json=BODY)).json()["job_id"]
+    r = await c.get(f"/api/jobs/{job_id}/events?from=abc")
+    assert r.status_code == 422
+
+
+async def test_sse_non_ascii_last_event_id_is_ignored(client):
+    c = await client()
+    job_id = (await c.post("/api/build", json=BODY)).json()["job_id"]
+    full = sse_events((await c.get(f"/api/jobs/{job_id}/events")).text)
+    # "\xb2" (superscript two) passes str.isdigit() but int("\xb2") raises
+    # ValueError -- must be ignored (fall back to a full replay), not 500.
+    # httpx requires ASCII for a str header value, so pass raw latin-1 bytes.
+    r = await c.get(f"/api/jobs/{job_id}/events",
+                    headers={"Last-Event-ID": "\xb2".encode("latin-1")})
+    assert r.status_code == 200
+    assert sse_events(r.text) == full
+
+
 async def test_validation_error_is_400(client):
     c = await client()
     r = await c.post("/api/build", json={**BODY, "files": {"main.v": V, "p.xdc": ""}})
@@ -110,6 +130,19 @@ async def test_body_too_large_is_413(client):
     assert r.status_code == 413
 
 
+async def test_chunked_body_too_large_is_413(client):
+    # No Content-Length header: httpx sends this as a chunked/streamed body,
+    # so only counting bytes as they're actually read (not trusting a
+    # declared Content-Length) can catch it.
+    async def body():
+        for _ in range(21):
+            yield b" " * 100_000  # 2_100_000 bytes total, > MAX_BODY
+
+    c = await client()
+    r = await c.post("/api/build", content=body(), headers={"content-type": "application/json"})
+    assert r.status_code == 413
+
+
 async def test_rate_limit_429(client):
     c = await client(limiter=RateLimiter(1, 600))
     r = await c.post("/api/build", json=BODY)
@@ -126,6 +159,7 @@ async def test_one_active_job_per_ip(client):
     assert (await c.post("/api/build", json=BODY)).status_code == 202
     r = await c.post("/api/build", json=BODY)
     assert r.status_code == 429 and "already" in r.json()["detail"]
+    assert r.headers["retry-after"] == "10"
     gate.set()
 
 
@@ -136,6 +170,19 @@ async def test_queue_full_503(client):
     r = await c.post("/api/build", json=BODY)
     assert r.status_code == 503
     gate.set()
+
+
+async def test_queue_full_503_does_not_consume_rate_limit_token(client):
+    limiter = RateLimiter(1, 600)
+    c_full = await client(queue_max=0, limiter=limiter)
+    r = await c_full.post("/api/build", json=BODY)
+    assert r.status_code == 503
+
+    # Same limiter (same simulated client IP), a manager with room this time:
+    # the 503 above must not have burnt the limiter's one allowed token.
+    c_ok = await client(limiter=limiter)
+    r = await c_ok.post("/api/build", json=BODY)
+    assert r.status_code == 202
 
 
 async def test_forwarded_for_used_only_when_trusted(client):
@@ -184,8 +231,11 @@ async def test_sse_heartbeat_while_queued(settings, registry):
     server = uvicorn.Server(config)
     server.install_signal_handlers = lambda: None  # don't touch pytest's handlers
     server_task = asyncio.create_task(server.serve())
-    try:
+
+    async def run() -> None:
         while not server.started:
+            if server_task.done():
+                server_task.result()  # re-raise a startup failure instead of spinning forever
             await asyncio.sleep(0.01)
         port = server.servers[0].sockets[0].getsockname()[1]
         async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}") as c:
@@ -197,6 +247,9 @@ async def test_sse_heartbeat_while_queued(settings, registry):
                     if any(ch.startswith(": ping") for ch in chunks):
                         break
             assert any(ch.startswith(": ping") for ch in chunks)
+
+    try:
+        await asyncio.wait_for(run(), timeout=15)
     finally:
         gate.set()
         server.should_exit = True

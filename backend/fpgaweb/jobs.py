@@ -130,6 +130,18 @@ class JobManager:
     def get(self, job_id: str) -> Job | None:
         return self._jobs.get(job_id)
 
+    def queue_full(self) -> bool:
+        """True if `submit()` would currently raise `QueueFull`.
+
+        Lets callers (e.g. the HTTP API) reject an over-capacity request
+        before doing anything with side effects, such as spending a rate
+        limit token, that a subsequent `QueueFull` from `submit()` itself
+        would be too late to avoid. `submit()` still re-checks and raises
+        `QueueFull` itself, since a caller may race another submission
+        between this check and calling `submit()`.
+        """
+        return len(self._pending) >= self._s.queue_max
+
     def active_count(self, ip: str) -> int:
         return sum(1 for j in self._jobs.values() if j.ip == ip and not j.terminal)
 
