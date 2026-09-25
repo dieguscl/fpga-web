@@ -10,10 +10,16 @@ def read_summary(path: Path) -> dict:
         data = json.loads(path.read_text())
     except (OSError, ValueError):
         return out
-    for name, u in (data.get("utilization") or {}).items():
-        if isinstance(u, dict) and u.get("used", 0) > 0:
-            out["utilization"][name] = {"used": int(u["used"]), "available": int(u.get("available", 0))}
-    for clk, f in (data.get("fmax") or {}).items():
-        if isinstance(f, dict) and "achieved" in f:
-            out["fmax"][clk] = round(float(f["achieved"]), 2)
+    if not isinstance(data, dict):
+        return out
+    util = data.get("utilization")
+    if isinstance(util, dict):
+        for name, u in util.items():
+            if isinstance(u, dict) and u.get("used", 0) > 0:
+                out["utilization"][name] = {"used": int(u["used"]), "available": int(u.get("available", 0))}
+    fmax = data.get("fmax")
+    if isinstance(fmax, dict):
+        for clk, f in fmax.items():
+            if isinstance(f, dict) and "achieved" in f:
+                out["fmax"][clk] = round(float(f["achieved"]), 2)
     return out

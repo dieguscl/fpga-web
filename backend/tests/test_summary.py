@@ -20,3 +20,13 @@ def test_missing_or_bad_file(tmp_path):
     assert read_summary(tmp_path / "nope.json") == empty
     (tmp_path / "bad.json").write_text("{not json")
     assert read_summary(tmp_path / "bad.json") == empty
+
+
+def test_non_object_json_is_ignored(tmp_path):
+    empty = {"utilization": {}, "fmax": {}}
+    # JSON array at top level
+    (tmp_path / "array.json").write_text(json.dumps([1, 2, 3]))
+    assert read_summary(tmp_path / "array.json") == empty
+    # utilization and fmax not dicts
+    (tmp_path / "bad_types.json").write_text(json.dumps({"utilization": "oops", "fmax": 3}))
+    assert read_summary(tmp_path / "bad_types.json") == empty
