@@ -245,6 +245,44 @@ async def test_symlinked_report_is_ignored(make, registry, tmp_path):
     assert job.state is JobState.DONE
 
 
+async def test_empty_bitstream_is_rejected(make, registry):
+    class EmptyBitstreamRunner(FakeRunner):
+        async def __call__(self, argv, cwd, settings, on_line, stdout_file=None):
+            self.calls.append(argv)
+            for i in range(self.lines):
+                on_line(f"{argv[0]} line {i}")
+            if argv[0] == "icepack":
+                (cwd / "hw.bin").write_bytes(b"")
+            if argv[0].startswith("nextpnr"):
+                (cwd / "report.json").write_text('{"utilization": {"LC": {"used": 5, "available": 10}}}')
+            return RunResult(0)
+
+    m = await make(EmptyBitstreamRunner())
+    job = m.submit("ip", registry.get("icebreaker"), "main", FILES, lint=False)
+    events = await drain(job)
+    assert events[-1] == {"type": "error", "message": "no bitstream was produced"}
+    assert job.state is JobState.FAILED and job.bitstream is None
+
+
+async def test_bad_report_value_falls_back_to_empty_summary(make, registry):
+    class BadReportRunner(FakeRunner):
+        async def __call__(self, argv, cwd, settings, on_line, stdout_file=None):
+            self.calls.append(argv)
+            for i in range(self.lines):
+                on_line(f"{argv[0]} line {i}")
+            if argv[0] == "icepack":
+                (cwd / "hw.bin").write_bytes(b"\x7e\xaa\x99\x7e")
+            if argv[0].startswith("nextpnr"):
+                (cwd / "report.json").write_text('{"fmax": {"c": {"achieved": "n/a"}}}')
+            return RunResult(0)
+
+    m = await make(BadReportRunner())
+    job = m.submit("ip", registry.get("icebreaker"), "main", FILES, lint=False)
+    events = await drain(job)
+    assert events[-1] == {"type": "done", "bitstream": "hw.bin", "summary": {"utilization": {}, "fmax": {}}}
+    assert job.state is JobState.DONE
+
+
 async def test_run_step_os_error_fails_job_with_step_name(make, registry):
     class RaisingRunner(FakeRunner):
         async def __call__(self, argv, cwd, settings, on_line, stdout_file=None):

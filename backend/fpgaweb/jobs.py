@@ -158,7 +158,7 @@ class JobManager:
                 raise
             except Exception:
                 log.exception("job %s crashed", job.id)
-                if not job.terminal:
+                if not job.events or job.events[-1]["type"] not in ("done", "error"):
                     self._fail(job, "internal build error")
             finally:
                 job.finished_at = self._clock()
@@ -200,10 +200,18 @@ class JobManager:
                 return self._fail(job, f"{step.name} failed (exit code {res.exit_code})")
 
         out = job.dir / plan.output
-        if out.is_symlink() or not out.is_file():
+        if out.is_symlink() or not out.is_file() or out.stat().st_size == 0:
             return self._fail(job, "no bitstream was produced")
+
+        report_path = job.dir / REPORT
+        if report_path.is_symlink():
+            summary = {"utilization": {}, "fmax": {}}
+        else:
+            try:
+                summary = read_summary(report_path)
+            except Exception:
+                summary = {"utilization": {}, "fmax": {}}
+
         job.bitstream = out
         job.state = JobState.DONE
-        report_path = job.dir / REPORT
-        summary = {"utilization": {}, "fmax": {}} if report_path.is_symlink() else read_summary(report_path)
         job.emit({"type": "done", "summary": summary, "bitstream": plan.output})

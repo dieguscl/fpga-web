@@ -30,3 +30,27 @@ def test_non_object_json_is_ignored(tmp_path):
     # utilization and fmax not dicts
     (tmp_path / "bad_types.json").write_text(json.dumps({"utilization": "oops", "fmax": 3}))
     assert read_summary(tmp_path / "bad_types.json") == empty
+
+
+def test_non_numeric_used_value_is_skipped(tmp_path):
+    p = tmp_path / "report.json"
+    p.write_text(json.dumps({"utilization": {"LC": {"used": "5"}}}))
+    assert read_summary(p) == {"utilization": {}, "fmax": {}}
+
+
+def test_non_numeric_achieved_value_is_skipped(tmp_path):
+    p = tmp_path / "report.json"
+    p.write_text(json.dumps({"fmax": {"c": {"achieved": "n/a"}}}))
+    assert read_summary(p) == {"utilization": {}, "fmax": {}}
+
+
+def test_one_bad_entry_does_not_drop_the_rest(tmp_path):
+    p = tmp_path / "report.json"
+    p.write_text(json.dumps({
+        "utilization": {"LC": {"used": "5"}, "BRAM": {"used": 2, "available": 8}},
+        "fmax": {"bad": {"achieved": "n/a"}, "good": {"achieved": 12.5}},
+    }))
+    assert read_summary(p) == {
+        "utilization": {"BRAM": {"used": 2, "available": 8}},
+        "fmax": {"good": 12.5},
+    }

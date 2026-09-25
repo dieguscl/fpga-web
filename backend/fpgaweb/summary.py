@@ -15,11 +15,20 @@ def read_summary(path: Path) -> dict:
     util = data.get("utilization")
     if isinstance(util, dict):
         for name, u in util.items():
-            if isinstance(u, dict) and u.get("used", 0) > 0:
-                out["utilization"][name] = {"used": int(u["used"]), "available": int(u.get("available", 0))}
+            if not isinstance(u, dict):
+                continue
+            try:
+                if u.get("used", 0) > 0:
+                    out["utilization"][name] = {"used": int(u["used"]), "available": int(u.get("available", 0))}
+            except (TypeError, ValueError):
+                continue
     fmax = data.get("fmax")
     if isinstance(fmax, dict):
         for clk, f in fmax.items():
-            if isinstance(f, dict) and "achieved" in f:
+            if not isinstance(f, dict) or "achieved" not in f:
+                continue
+            try:
                 out["fmax"][clk] = round(float(f["achieved"]), 2)
+            except (TypeError, ValueError):
+                continue
     return out
