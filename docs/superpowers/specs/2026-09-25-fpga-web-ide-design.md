@@ -19,7 +19,7 @@ runs on the user's board.
 - Server-side builds using the open-source toolchain (Apio's supported set).
 - Browser-side flashing to the user's own board via WebUSB.
 - "Any board" the open-source toolchain supports.
-- Deployed as Docker on an Oracle Cloud free Ampere A1 instance (aarch64).
+- Deployed on host `oc` (Oracle Cloud free Ampere A1, aarch64) in its existing k3s cluster, public at `fpga.dieguscl.com` via Cloudflare.
 
 ### Assumed
 - Flashing supported in Chromium browsers only (Chrome, Edge); others get
@@ -39,9 +39,9 @@ runs on the user's board.
 ## 3. Architecture
 
 ```
-Browser (Chrome/Edge)                         Oracle A1 (Docker Compose)
+Browser (Chrome/Edge)                         oc: k3s (Traefik ingress)  
 ┌──────────────────────────────┐              ┌────────────────────────────────┐
-│ Static SPA                   │ POST /build  │ caddy (TLS, reverse proxy)     │
+│ Static SPA                   │ POST /build  │ Traefik ingress (Cloudflare TLS)│
 │ - CodeMirror editor, tabs    │ ───────────► │   │                            │
 │ - board picker               │              │   ▼                            │
 │ - projects in IndexedDB,     │  SSE logs    │ app: FastAPI                   │
@@ -159,11 +159,14 @@ attribution. Per-board starter templates come from Apio's `examples/<board>/`
   max 256 processes, 200 MB disk in job dir. Exceed → kill → `error` event.
 - **Concurrency:** 2 workers; queue max 20; beyond that → HTTP 503 "busy".
 - **Rate limit:** per IP, 10 builds / 10 min and 1 active job; exceed → 429.
-- **TLS:** Caddy with Let's Encrypt; requires a domain or free subdomain
-  (e.g. DuckDNS). HTTPS is mandatory for WebUSB.
+- **TLS:** Cloudflare proxies `fpga.dieguscl.com` and terminates public TLS;
+  origin is the k3s Traefik ingress. HTTPS is mandatory for WebUSB.
+- **Client IP:** `CF-Connecting-IP`, falling back to `X-Forwarded-For`.
+- **Userns for bubblewrap:** pod-scoped AppArmor profile `fpgaweb-bwrap`;
+  no host-wide sysctl change on `oc` (it also runs other workloads).
 - **Data:** no database, no user code retained after TTL. Logs record IP,
   board, duration, outcome — no source code.
-- **Oracle:** security list opens 80/443 only.
+- **Oracle:** security list opens 80/443 only (already the case for Traefik).
 
 ## 8. Frontend
 
@@ -180,10 +183,11 @@ attribution. Per-board starter templates come from Apio's `examples/<board>/`
 ## 9. Deployment
 
 - Repo: `~/projects/fpga-web`.
-- `docker compose` services: `app` (FastAPI + SPA + toolchains), `caddy`.
-- Multi-arch image; build on the dev machine with buildx or directly on the
-  Oracle box.
-- Config via env: domain, worker count, limits.
+- Image built natively on `oc` (arm64) and imported into k3s containerd.
+- k3s namespace `fpga-web`: Deployment (1 replica, 8 Gi / 3 CPU limits),
+  Service, Traefik Ingress for `fpga.dieguscl.com`, PVC for the chipdb cache.
+- SSE heartbeat every 15 s to survive Cloudflare's 100 s idle timeout.
+- Config via env: worker count, limits.
 
 ## 10. Testing
 
@@ -204,4 +208,4 @@ attribution. Per-board starter templates come from Apio's `examples/<board>/`
 
 - Confirm Apio's xilinx chipdb `.bin` files are architecture-independent.
 - Final openFPGALoader board-name mapping table.
-- Domain name for the deployment.
+- ~~Domain name~~ → `fpga.dieguscl.com` (resolved).

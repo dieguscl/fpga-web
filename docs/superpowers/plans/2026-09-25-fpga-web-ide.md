@@ -4,19 +4,20 @@
 
 **Goal:** A public web app where users write Verilog, the server builds a bitstream with the open-source FPGA toolchain, and the browser flashes it onto the user's own board over WebUSB.
 
-**Architecture:** One Docker image: FastAPI backend (board registry, validation, per-arch build recipes, bubblewrap sandbox, asyncio job queue with SSE events, per-IP rate limiting) that also serves a static Vite/TypeScript SPA (CodeMirror editor, IndexedDB projects, `@yowasp/openfpgaloader` WebUSB flasher). Caddy terminates TLS in front. Toolchains: OSS CAD Suite (iCE40/ECP5/Gowin) + openXC7 built with Nix from `fpgawars/tools-openxc7` at the commit Apio ships, so Apio's Xilinx chipdb files are compatible.
+**Architecture:** One container image deployed to the k3s cluster on host `oc` (Oracle A1, arm64) behind the existing Traefik ingress at `fpga.dieguscl.com` (Cloudflare proxies and terminates public TLS). The image holds a FastAPI backend (board registry, validation, per-arch build recipes, bubblewrap sandbox, asyncio job queue with SSE events, per-IP rate limiting) that also serves a static Vite/TypeScript SPA (CodeMirror editor, IndexedDB projects, `@yowasp/openfpgaloader` WebUSB flasher). Toolchains: OSS CAD Suite (iCE40/ECP5/Gowin) + openXC7 built with Nix from `fpgawars/tools-openxc7` at the commit Apio ships, so Apio's Xilinx chipdb files are compatible.
 
-**Tech Stack:** Python 3.12, FastAPI, uvicorn, httpx, pytest, pytest-asyncio; TypeScript, Vite, CodeMirror 6, idb-keyval, fflate, vitest, Playwright; bubblewrap; Docker Compose; Caddy; Nix (build stage only).
+**Tech Stack:** Python 3.12, FastAPI, uvicorn, httpx, pytest, pytest-asyncio; TypeScript, Vite, CodeMirror 6, idb-keyval, fflate, vitest, Playwright; bubblewrap; Docker (image build); k3s + Traefik Ingress; AppArmor; Nix (build stage only).
 
 **Spec:** `docs/superpowers/specs/2026-09-25-fpga-web-ide-design.md`
 
 ## Global Constraints
 
-- Repo root: `~/projects/fpga-web`. Backend in `backend/` (package `fpgaweb`), frontend in `frontend/`, Docker files in `docker/`.
+- Repo root: `~/projects/fpga-web`. Backend in `backend/` (package `fpgaweb`), frontend in `frontend/`, image in `docker/`, cluster manifests + AppArmor profile in `deploy/`.
+- Deployment: host `ssh oc` (Ubuntu 24.04 aarch64, k3s v1.35, Traefik owns 80/443), namespace `fpga-web`, public name `fpga.dieguscl.com` (Cloudflare proxied DNS set up by the user). Do not touch the existing `hexaflex` namespace. Do not change host-wide sysctls; unprivileged user namespaces are granted to this pod only via the `fpgaweb-bwrap` AppArmor profile.
 - Python ≥ 3.12. Node ≥ 22.
 - Supported arches exactly: `xilinx`, `ice40`, `ecp5`, `gowin`. Constraint ext: xilinx `.xdc`, ice40 `.pcf`, ecp5 `.lpf`, gowin `.cst`. Bitstream ext: xilinx `.bit`, ice40 `.bin`, ecp5 `.bit`, gowin `.fs`.
 - Request limits: ≤ 50 files, ≤ 1 MB total UTF-8, filename `^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$`, extensions `.v .sv .vh .svh .xdc .pcf .lpf .cst .hex .mem`. Files ending `_tb.v` / `_tb.sv` are not synthesised. HTTP body > 2 MB → 413.
-- Job limits: 120 s wall per step, 90 s CPU per step, 4 GiB address space (RLIMIT_AS), 200 MB max file size, 5000 log lines per job, 2000 chars per log line. Container: `pids_limit: 512`, `mem_limit: 8g`.
+- Job limits: 120 s wall per step, 90 s CPU per step, 4 GiB address space (RLIMIT_AS), 200 MB max file size, 5000 log lines per job, 2000 chars per log line. Pod: memory limit 8 Gi, CPU limit 3.
 - Concurrency: 2 workers, queue max 20 (→ 503), per IP 10 builds / 600 s and 1 active job (→ 429).
 - Job directory + results deleted 600 s after completion.
 - No user source code in logs. No database.
@@ -25,7 +26,7 @@
 - Flashing only in Chromium browsers (WebUSB); other browsers get download-only mode.
 - Commit after each task; messages in Conventional Commits style ending with the `Co-Authored-By` trailer used in this repo.
 
-**Plan-level decisions (spec §7 refinements):** memory is capped with `RLIMIT_AS` = 4 GiB per tool process (portable, no cgroup delegation needed inside Docker; nextpnr-xilinx on the largest parts needs > 3 GB virtual), and the process-count cap is enforced by the container `pids_limit` instead of `RLIMIT_NPROC` (which is per-UID and would count all workers together).
+**Plan-level decisions (spec §7 refinements):** memory is capped with `RLIMIT_AS` = 4 GiB per tool process (portable, no cgroup delegation needed inside Docker; nextpnr-xilinx on the largest parts needs > 3 GB virtual), and there is no per-job process-count cap (`RLIMIT_NPROC` is per-UID and would count all workers together; the pod memory/CPU limits bound the blast radius). Client IP for rate limiting comes from `CF-Connecting-IP` (Cloudflare), falling back to the first `X-Forwarded-For` entry. SSE streams send a `: ping` comment every 15 s so Cloudflare's 100 s idle timeout never closes a queued build's stream.
 
 ## Review Focus
 
@@ -77,12 +78,14 @@ fpga-web/
 │       ├── errors.test.ts  project.test.ts  flasher.test.ts
 │       └── e2e/build.spec.ts
 ├── docker/
-│   ├── Dockerfile
-│   ├── Caddyfile
-│   └── compose.yaml
+│   └── Dockerfile
+├── deploy/
+│   ├── apparmor/fpgaweb-bwrap       # AppArmor profile granting userns to the pod
+│   └── k8s/fpga-web.yaml            # Namespace, PVC, Deployment, Service, Ingress
 ├── scripts/
 │   ├── vendor_apio_defs.sh
-│   └── check_container.sh
+│   ├── check_container.sh
+│   └── deploy_oc.sh
 └── docs/
     ├── deploy.md
     └── manual-flash-checklist.md
@@ -355,6 +358,7 @@ class Settings:
     max_line_chars: int = 2000
     rate_n: int = 10
     rate_window_s: int = 600
+    sse_ping_s: int = 15
 
 
 def _coerce(name: str, raw: str):
@@ -2314,6 +2318,8 @@ async def client(settings, registry):
 def sse_events(text: str) -> list[tuple[int, dict]]:
     out = []
     for frame in text.strip().split("\n\n"):
+        if frame.startswith(":"):
+            continue  # heartbeat comment
         lines = dict(l.split(": ", 1) for l in frame.splitlines())
         out.append((int(lines["id"]), json.loads(lines["data"])))
     return out
@@ -2427,6 +2433,32 @@ async def test_forwarded_for_used_only_when_trusted(client):
     gate.set()
 
 
+async def test_cf_connecting_ip_preferred(client):
+    import asyncio
+    gate = asyncio.Event()
+    c = await client(runner=FakeRunner(gate=gate), trust_proxy=True)
+    same_client = {"CF-Connecting-IP": "7.7.7.7"}
+    assert (await c.post("/api/build", json=BODY, headers={**same_client, "X-Forwarded-For": "1.1.1.1"})).status_code == 202
+    r = await c.post("/api/build", json=BODY, headers={**same_client, "X-Forwarded-For": "2.2.2.2"})
+    assert r.status_code == 429
+    gate.set()
+
+
+async def test_sse_heartbeat_while_queued(client):
+    import asyncio
+    gate = asyncio.Event()
+    c = await client(runner=FakeRunner(gate=gate), sse_ping_s=0)
+    job_id = (await c.post("/api/build", json=BODY)).json()["job_id"]
+    async with c.stream("GET", f"/api/jobs/{job_id}/events") as r:
+        chunks = []
+        async for chunk in r.aiter_text():
+            chunks.append(chunk)
+            if any(ch.startswith(": ping") for ch in chunks):
+                break
+    assert any(ch.startswith(": ping") for ch in chunks)
+    gate.set()
+
+
 async def test_unknown_job_404(client):
     c = await client()
     assert (await c.get("/api/jobs/nope/events")).status_code == 404
@@ -2452,6 +2484,7 @@ Expected: FAIL, `ModuleNotFoundError: No module named 'fpgaweb.api'`.
 ```python
 """HTTP API: boards, build submission, SSE job events, bitstream download, SPA."""
 
+import asyncio
 import json
 from contextlib import asynccontextmanager
 
@@ -2499,6 +2532,9 @@ def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
 
     def client_ip(request: Request) -> str:
         if settings.trust_proxy:
+            cf = request.headers.get("cf-connecting-ip")
+            if cf:
+                return cf.strip()
             fwd = request.headers.get("x-forwarded-for")
             if fwd:
                 return fwd.split(",")[0].strip()
@@ -2557,8 +2593,22 @@ def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
                 start = int(last) + 1
 
         async def gen():
-            async for i, ev in job.stream(start):
-                yield f"id: {i}\ndata: {json.dumps(ev)}\n\n"
+            it = job.stream(start).__aiter__()
+            nxt = asyncio.ensure_future(it.__anext__())
+            try:
+                while True:
+                    done, _ = await asyncio.wait({nxt}, timeout=settings.sse_ping_s)
+                    if not done:
+                        yield ": ping\n\n"
+                        continue
+                    try:
+                        i, ev = nxt.result()
+                    except StopAsyncIteration:
+                        return
+                    yield f"id: {i}\ndata: {json.dumps(ev)}\n\n"
+                    nxt = asyncio.ensure_future(it.__anext__())
+            finally:
+                nxt.cancel()
 
         return StreamingResponse(gen(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -3707,14 +3757,14 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 15: Docker image (multi-arch toolchains), Compose, Caddy
+### Task 15: Container image (multi-arch toolchains), k3s manifests, AppArmor profile
 
 **Files:**
-- Create: `docker/Dockerfile`, `docker/Caddyfile`, `docker/compose.yaml`, `.dockerignore`, `scripts/check_container.sh`
+- Create: `docker/Dockerfile`, `.dockerignore`, `deploy/apparmor/fpgaweb-bwrap`, `deploy/k8s/fpga-web.yaml`, `scripts/check_container.sh`
 
 **Interfaces:**
 - Consumes: backend package, `frontend/dist` (built in-image), Settings defaults (`/opt/fpga/...`, `/var/lib/fpgaweb/...`).
-- Produces: image `fpga-web:latest` for `linux/amd64` and `linux/arm64`; compose services `app` (port 8000 internal) and `caddy` (80/443); env `DOMAIN`.
+- Produces: image `fpga-web:<tag>` buildable natively on `linux/amd64` and `linux/arm64`; AppArmor profile `fpgaweb-bwrap`; manifest with placeholder `fpga-web:IMAGE_TAG` (substituted by Task 16's deploy script).
 
 - [ ] **Step 1: Write the Dockerfile**
 
@@ -3786,66 +3836,128 @@ CMD ["/app/venv/bin/uvicorn", "fpgaweb.main:app", "--host", "0.0.0.0", "--port",
 
 Note on `--out-link /out/r`: with 4 installables Nix creates `/out/r`, `/out/r-1`, `/out/r-2`, `/out/r-3` in argument order, so `/out/r-3` is `prjxray-db`. Step 3 verifies this layout.
 
-- [ ] **Step 2: Compose and Caddy**
+- [ ] **Step 2: AppArmor profile and Kubernetes manifest**
 
-`docker/Caddyfile`:
+`deploy/apparmor/fpgaweb-bwrap` (same pattern Ubuntu uses for browsers: unconfined except that it may create user namespaces, which bubblewrap needs; applied only to this pod, no host-wide sysctl change):
 ```
-{$DOMAIN} {
-	encode zstd gzip
-	reverse_proxy app:8000 {
-		flush_interval -1
-	}
+abi <abi/4.0>,
+include <tunables/global>
+
+profile fpgaweb-bwrap flags=(unconfined) {
+  userns,
 }
 ```
 
-`docker/compose.yaml`:
+`deploy/k8s/fpga-web.yaml`:
 ```yaml
-services:
-  app:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    image: fpga-web:latest
-    restart: unless-stopped
-    environment:
-      FPGAWEB_WORKERS: "2"
-    volumes:
-      - chipdb:/var/lib/fpgaweb/chipdb
-    mem_limit: 8g
-    pids_limit: 512
-    cap_drop: [ALL]
-    security_opt:
-      - no-new-privileges:true
-      # bubblewrap needs unprivileged user namespaces inside the container
-      - seccomp:unconfined
-      - apparmor:unconfined
-    tmpfs:
-      - /var/lib/fpgaweb/jobs:size=2g,uid=10001
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    ports: ["80:80", "443:443"]
-    environment:
-      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-    depends_on: [app]
-volumes:
-  chipdb:
-  caddy_data:
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fpga-web
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chipdb
+  namespace: fpga-web
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fpga-web
+  namespace: fpga-web
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: fpga-web}
+  template:
+    metadata:
+      labels: {app: fpga-web}
+    spec:
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        runAsNonRoot: true
+        seccompProfile: {type: Unconfined}
+        appArmorProfile: {type: Localhost, localhostProfile: fpgaweb-bwrap}
+      containers:
+        - name: app
+          image: fpga-web:IMAGE_TAG
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - {name: FPGAWEB_TRUST_PROXY, value: "true"}
+            - {name: FPGAWEB_WORKERS, value: "2"}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "3", memory: 8Gi}
+          readinessProbe:
+            httpGet: {path: /api/boards, port: 8000}
+            periodSeconds: 10
+          volumeMounts:
+            - {name: chipdb, mountPath: /var/lib/fpgaweb/chipdb}
+            - {name: jobs, mountPath: /var/lib/fpgaweb/jobs}
+      volumes:
+        - name: chipdb
+          persistentVolumeClaim: {claimName: chipdb}
+        - name: jobs
+          emptyDir: {sizeLimit: 2Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fpga-web
+  namespace: fpga-web
+spec:
+  selector: {app: fpga-web}
+  ports:
+    - port: 80
+      targetPort: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fpga-web
+  namespace: fpga-web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: fpga.dieguscl.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fpga-web
+                port: {number: 80}
 ```
+
+Validate: `kubectl apply --dry-run=client -f deploy/k8s/fpga-web.yaml` (use `ssh oc sudo k3s kubectl apply --dry-run=client -f -  < deploy/k8s/fpga-web.yaml` if no local kubectl) → 5 resources "created (dry run)".
 
 - [ ] **Step 3: Build locally (amd64) and verify toolchain layout**
 
 Run:
 ```bash
 cd ~/projects/fpga-web/frontend && npm install --package-lock-only
-cd ~/projects/fpga-web && docker build -f docker/Dockerfile -t fpga-web:latest . 2>&1 | tail -20
-docker run --rm fpga-web:latest bash -c 'ls /opt/fpga/bin; ls /opt/fpga/prjxray-db; yosys -V; nextpnr-xilinx --version 2>&1 | head -1' 
+cd ~/projects/fpga-web && docker build -f docker/Dockerfile -t fpga-web:dev . 2>&1 | tail -20
+docker run --rm fpga-web:dev bash -c 'ls /opt/fpga/bin; ls /opt/fpga/prjxray-db; yosys -V; nextpnr-xilinx --version 2>&1 | head -1' 
 ```
 Expected: `/opt/fpga/bin` lists `nextpnr-xilinx`, `fasm2frames`, `xc7frames2bit` (plus others); `/opt/fpga/prjxray-db` lists `artix7 kintex7 spartan7 zynq7`; yosys prints a version. The Nix build takes 20–60 min the first time.
-If `fasm2frames` or `xc7frames2bit` is missing from `/opt/fpga/bin`, locate them with `docker run --rm fpga-web:latest bash -c 'find /nix/store -name "fasm2frames*" -o -name "xc7frames2bit*"'` and add explicit `ln -sf` lines for those paths in the openxc7 stage. If `/opt/fpga/prjxray-db` has no `artix7`, change `/out/r-3` to the out-link whose `ls` shows `artix7`.
+If `fasm2frames` or `xc7frames2bit` is missing from `/opt/fpga/bin`, locate them with `docker run --rm fpga-web:dev bash -c 'find /nix/store -name "fasm2frames*" -o -name "xc7frames2bit*"'` and add explicit `ln -sf` lines for those paths in the openxc7 stage. If `/opt/fpga/prjxray-db` has no `artix7`, change `/out/r-3` to the out-link whose `ls` shows `artix7`.
 
 - [ ] **Step 4: Container check script**
 
@@ -3854,82 +3966,116 @@ If `fasm2frames` or `xc7frames2bit` is missing from `/opt/fpga/bin`, locate them
 #!/usr/bin/env bash
 # Build blinky for one board per arch inside the running image (sandbox on).
 set -euo pipefail
-IMAGE="${1:-fpga-web:latest}"
-docker run --rm --security-opt seccomp=unconfined --security-opt apparmor=unconfined \
-  --cap-drop ALL --pids-limit 512 -v fpga-web-chipdb:/var/lib/fpgaweb/chipdb \
+IMAGE="${1:-fpga-web:dev}"
+docker run --rm --security-opt seccomp=unconfined --security-opt apparmor=fpgaweb-bwrap \
+  --security-opt no-new-privileges --cap-drop ALL -v fpga-web-chipdb:/var/lib/fpgaweb/chipdb \
   -e FPGAWEB_INTEGRATION=1 --entrypoint bash "$IMAGE" -c '
     cd /app/backend && /app/venv/bin/python -m pytest -q -m integration tests/integration tests/test_sandbox.py'
 ```
 
-Run:
+Run (loads the AppArmor profile on this machine first; Mint 22 restricts unprivileged user namespaces like Ubuntu 24.04):
 ```bash
-chmod +x scripts/check_container.sh && scripts/check_container.sh
+sudo cp deploy/apparmor/fpgaweb-bwrap /etc/apparmor.d/ && sudo apparmor_parser -r /etc/apparmor.d/fpgaweb-bwrap
+chmod +x scripts/check_container.sh && scripts/check_container.sh fpga-web:dev
 ```
 Expected: integration tests (7) and sandbox tests PASS inside the container, including the bwrap tests (not skipped).
-If the bwrap tests are skipped or builds fail with `setting up uid map: Permission denied` / `No permissions to create a new namespace`, the host (Ubuntu ≥ 23.10, incl. Mint 22) blocks unprivileged user namespaces for unconfined processes. Allow them on the host: `echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee /etc/sysctl.d/60-userns.conf && sudo sysctl --system`, then re-run. This is a host-wide security setting; record it in `docs/deploy.md` (Task 16 already lists it for the Oracle host). This confirms the Apio chipdb downloaded from the `2026-09-24` release loads in the Nix-built `nextpnr-xilinx` (`test_blinky_builds[basys3]`).
+If the bwrap tests are skipped or builds fail with `setting up uid map: Permission denied` / `No permissions to create a new namespace`, confirm the profile is loaded (`sudo aa-status | grep fpgaweb-bwrap`) and that the container runs under it (`docker run --rm --security-opt apparmor=fpgaweb-bwrap fpga-web:dev cat /proc/self/attr/current` → `fpgaweb-bwrap (unconfined)`). Do not change the host sysctl.
 If `test_blinky_builds[basys3]` fails with `internal IDs inconsistent with the supplied chip database`, the Nix build is not the same nextpnr-xilinx revision as the chipdb: confirm `/src/nix/nextpnr-xilinx.nix` has `rev = "0eae9fbb19dfb83cdd30d5048d8b0ba744180ad0"` in the openxc7 stage. If the revision matches and it still fails, switch to generating chipdbs in-image: add `.#nextpnr-xilinx-chipdb.<die>` for each die in `chipdb-parts.json` to the Nix build, copy them to `/opt/fpga/chipdb`, set `FPGAWEB_CHIPDB_DIR=/opt/fpga/chipdb`, and make `ChipdbStore.ensure` skip downloading when the file exists regardless of size (update `test_existing_file_with_right_size_is_reused` accordingly).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .dockerignore docker scripts/check_container.sh frontend/package-lock.json && git commit -m "build: multi-arch Docker image with openXC7 and OSS CAD Suite, Caddy compose
+git add .dockerignore docker deploy scripts/check_container.sh frontend/package-lock.json && git commit -m "build: multi-arch image with openXC7 and OSS CAD Suite, k3s manifests
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task 16: ARM deployment on Oracle A1 and docs
+### Task 16: Deploy to `oc` (k3s) and docs
 
 **Files:**
-- Create: `docs/deploy.md`, `docs/manual-flash-checklist.md`, `README.md`
+- Create: `scripts/deploy_oc.sh`, `docs/deploy.md`, `docs/manual-flash-checklist.md`, `README.md`
 
 **Interfaces:**
-- Consumes: Task 15 image and compose.
-- Produces: running deployment reachable at `https://$DOMAIN`; docs.
+- Consumes: Task 15 Dockerfile, AppArmor profile, manifest.
+- Produces: running deployment in namespace `fpga-web` on `oc`, Ingress host `fpga.dieguscl.com`; docs.
 
-- [ ] **Step 1: Write deployment doc**
+- [ ] **Step 1: Deploy script**
+
+`scripts/deploy_oc.sh`:
+```bash
+#!/usr/bin/env bash
+# Build the image natively on the arm64 host and roll it out to its k3s cluster.
+set -euo pipefail
+HOST="${1:-oc}"
+TAG="${2:-$(git rev-parse --short HEAD)}"
+cd "$(dirname "$0")/.."
+rsync -az --delete --exclude node_modules --exclude .venv --exclude frontend/dist --exclude .git ./ "$HOST:fpga-web/"
+ssh "$HOST" bash -s <<EOF
+set -euo pipefail
+cd ~/fpga-web
+sudo cp deploy/apparmor/fpgaweb-bwrap /etc/apparmor.d/fpgaweb-bwrap
+sudo apparmor_parser -r /etc/apparmor.d/fpgaweb-bwrap
+docker build -f docker/Dockerfile -t fpga-web:$TAG .
+docker save fpga-web:$TAG | sudo k3s ctr images import -
+sed 's/fpga-web:IMAGE_TAG/fpga-web:$TAG/' deploy/k8s/fpga-web.yaml | sudo k3s kubectl apply -f -
+sudo k3s kubectl -n fpga-web rollout status deploy/fpga-web --timeout=600s
+EOF
+echo "deployed fpga-web:$TAG to $HOST"
+```
+
+- [ ] **Step 2: Run the container checks on `oc` (arm64), then deploy**
+
+Run:
+```bash
+cd ~/projects/fpga-web && chmod +x scripts/deploy_oc.sh
+rsync -az --delete --exclude node_modules --exclude .venv --exclude frontend/dist --exclude .git ./ oc:fpga-web/
+ssh oc 'cd fpga-web && sudo cp deploy/apparmor/fpgaweb-bwrap /etc/apparmor.d/ && sudo apparmor_parser -r /etc/apparmor.d/fpgaweb-bwrap && docker build -f docker/Dockerfile -t fpga-web:dev . && scripts/check_container.sh fpga-web:dev'
+scripts/deploy_oc.sh oc
+```
+Expected: the first arm64 image build takes 30–90 min (Nix builds nextpnr-xilinx); `check_container.sh` passes all integration + sandbox tests on arm64 — this is the check that Apio's `2026-09-24` Xilinx chipdb loads in the arm64 nextpnr-xilinx (follow Task 15 Step 4's fallback if not); rollout finishes with `deployment "fpga-web" successfully rolled out`.
+
+- [ ] **Step 3: Verify through the ingress**
+
+Run:
+```bash
+ssh oc 'curl -fsS -H "Host: fpga.dieguscl.com" http://127.0.0.1/api/boards | python3 -c "import json,sys;print(len(json.load(sys.stdin)))"'
+ssh oc 'sudo k3s kubectl -n fpga-web logs deploy/fpga-web --tail=20'
+ssh oc 'sudo k3s kubectl get pods -A | grep -v fpga-web | grep -vE "Running|Completed" || echo "other workloads healthy"'
+```
+Expected: `109`; uvicorn startup lines without errors; `other workloads healthy` (hexaflex untouched).
+Once the user has pointed Cloudflare at the host: `curl -fsS https://fpga.dieguscl.com/api/boards | head -c 200` returns JSON. Then build the basys3 template in Chrome at `https://fpga.dieguscl.com` and confirm "Build succeeded" and a `basys3.bit` download. Record one build time per arch in `docs/deploy.md` under "Measured build times (A1)".
+
+- [ ] **Step 4: Docs**
 
 `docs/deploy.md`:
 ````markdown
-# Deploying on an Oracle Cloud Ampere A1 (arm64) instance
+# Deployment (host `oc`, k3s)
 
-## Once
-1. Instance: Ubuntu 24.04 (aarch64), ≥ 2 OCPU / 12 GB RAM. Boot volume ≥ 50 GB.
-2. Oracle VCN security list: allow TCP 80 and 443 from 0.0.0.0/0.
-3. On the instance also open the host firewall (Oracle Ubuntu images ship iptables rules):
-   ```bash
-   sudo iptables -I INPUT 6 -p tcp -m multiport --dports 80,443 -j ACCEPT
-   sudo netfilter-persistent save
-   ```
-4. Install Docker: `curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER` (log out/in).
-5. Allow unprivileged user namespaces (bubblewrap inside the container needs them; Ubuntu 24.04 restricts them by default):
-   `echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee /etc/sysctl.d/60-userns.conf && sudo sysctl --system`
-6. Point a domain at the instance's public IP (A record), e.g. a free DuckDNS subdomain.
+- Host: Oracle Cloud Ampere A1, Ubuntu 24.04 aarch64, single-node k3s with Traefik on 80/443.
+- Namespace `fpga-web`: Deployment (1 replica), Service, Ingress `fpga.dieguscl.com`, PVC `chipdb` (Xilinx chipdb cache, local-path).
+- Public access: Cloudflare proxied DNS record `fpga.dieguscl.com` → host public IP. SSL mode "Full" (Traefik serves its default certificate on 443) or "Flexible" (HTTP to origin). WebUSB needs the HTTPS that Cloudflare provides.
+- Build isolation: each tool runs in bubblewrap. Ubuntu 24.04 blocks unprivileged user namespaces for unconfined processes, so the pod runs under the AppArmor profile `fpgaweb-bwrap` (`deploy/apparmor/`), which only adds the `userns` permission. No host-wide sysctl is changed.
 
 ## Deploy / update
 ```bash
-git clone <repo-url> ~/fpga-web && cd ~/fpga-web/docker
-echo "DOMAIN=fpga.example.duckdns.org" > .env
-docker compose build        # first build on ARM: 30–90 min (Nix builds nextpnr-xilinx)
-docker compose up -d
-../scripts/check_container.sh fpga-web:latest
+scripts/deploy_oc.sh oc            # rsync, build on oc (arm64), import into k3s, apply, wait
 ```
-Update: `git pull && docker compose build && docker compose up -d`.
+The script re-loads the AppArmor profile each time (after a reboot the profile is loaded from /etc/apparmor.d automatically).
 
 ## Operate
-- Logs: `docker compose logs -f app` (one line per build: ip, board, state; no source code).
-- Chipdb cache lives in the `chipdb` volume (~100–200 MB per Xilinx part, downloaded on first use).
-- Bump toolchains: change `OSS_CAD_DATE` / `OPENXC7_COMMIT` in `docker/Dockerfile`; when bumping openXC7, also re-vendor `XILINX-PARTS-INDEX.json` from the matching Apio openxc7 package (`scripts/vendor_apio_defs.sh`) so chipdb downloads match.
+- Logs: `ssh oc sudo k3s kubectl -n fpga-web logs -f deploy/fpga-web` (one line per build: ip, board, state; no source code).
+- Chipdb cache: PVC `chipdb` (~100–200 MB per Xilinx part, downloaded on first use).
+- Bump toolchains: change `OSS_CAD_DATE` / `OPENXC7_COMMIT` in `docker/Dockerfile`; when bumping openXC7 also re-vendor `XILINX-PARTS-INDEX.json` from the matching Apio openxc7 package (`scripts/vendor_apio_defs.sh`) so chipdb downloads match.
+- Old images: `ssh oc 'sudo k3s crictl images | grep fpga-web'`, remove with `sudo k3s crictl rmi <id>`; `docker image prune` for the build cache.
 ````
-
-- [ ] **Step 2: Manual flash checklist and README**
 
 `docs/manual-flash-checklist.md`:
 ```markdown
 # Manual WebUSB flash checklist (needs real hardware)
 
-Run on Chrome/Edge against the deployed site (HTTPS) or `npm run dev` on localhost.
+Run in Chrome/Edge at https://fpga.dieguscl.com (or `npm run dev` on localhost).
 
 - [ ] Linux: udev rules from the "USB setup" dialog applied; board replugged.
 - [ ] Windows: Zadig → WinUSB on the board's JTAG interface.
@@ -3940,15 +4086,15 @@ Run on Chrome/Edge against the deployed site (HTTPS) or `npm run dev` on localho
 - [ ] Cancel the device picker → status "Flash failed: No USB device selected." and setup help opens.
 - [ ] Firefox: banner says flashing is unavailable; Download still works.
 
-Boards verified (fill in): | board | OS | SRAM | flash | date |
+Boards verified: | board | OS | SRAM | flash | date |
 ```
 
 `README.md`:
-```markdown
+````markdown
 # FPGA Web IDE
 
 Write Verilog in the browser, build it on the server with the open-source FPGA toolchain
-(Yosys, nextpnr, openXC7), and flash your own board over WebUSB.
+(Yosys, nextpnr, openXC7), and flash your own board over WebUSB. Live at https://fpga.dieguscl.com.
 
 - Spec: `docs/superpowers/specs/2026-09-25-fpga-web-ide-design.md`
 - Deploy: `docs/deploy.md`
@@ -3962,20 +4108,12 @@ cd ../frontend && npm install && npm run dev                      # UI on :5173
 Integration tests (real toolchains from `~/.apio`): `source backend/dev.env && FPGAWEB_INTEGRATION=1 backend/.venv/bin/pytest -m integration`.
 
 Board definitions and examples come from [Apio](https://github.com/FPGAwars/apio) (GPL-2.0).
-```
+````
 
-- [ ] **Step 3: Deploy to the Oracle box and verify**
-
-Follow `docs/deploy.md` on the instance. Verify:
-```bash
-curl -fsS https://$DOMAIN/api/boards | python3 -c "import json,sys;print(len(json.load(sys.stdin)))"
-```
-Expected: `109`. Then open `https://$DOMAIN` in Chrome, build the basys3 template, and confirm "Build succeeded" and a `basys3.bit` download. Record timings for one build per arch in `docs/deploy.md` under a new "Measured build times (A1)" heading.
-
-- [ ] **Step 4: Commit and push**
+- [ ] **Step 5: Commit**
 
 ```bash
-cd ~/projects/fpga-web && git add README.md docs && git commit -m "docs: deployment guide, flash checklist, README
+cd ~/projects/fpga-web && git add scripts/deploy_oc.sh README.md docs && git commit -m "docs: k3s deployment on oc, flash checklist, README
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
