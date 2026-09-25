@@ -190,7 +190,7 @@ attribution. Per-board starter templates come from Apio's `examples/<board>/`
 - **Unit (pytest):** validation rules, board loading, recipe command
   generation per arch, rate limiter, job lifecycle.
 - **Toolchain integration (in image):** build Apio's blinky for one board per
-  arch — `basys3`, `icebreaker`, `ulx3s-85f`, `tangnano9k` — assert a valid
+  arch — `basys3`, `icebreaker`, `ulx3s-85f`, `sipeed-tang-nano-9k` — assert a valid
   bitstream is produced (non-empty, correct header/magic). Run on amd64 and
   arm64 (QEMU in CI).
 - **Sandbox:** `` `include "/etc/passwd" `` fails; `$readmemh` outside job dir
