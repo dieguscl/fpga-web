@@ -93,6 +93,17 @@ async def test_unknown_part(settings):
         await ChipdbStore(settings, index(), FakeFetch()).ensure("xc7z999")
 
 
+async def test_archive_missing_member(settings):
+    # Asset contains "wrong-name.bin", but index expects "xc7a35tcpg236.bin"
+    wrong_asset = make_asset("wrong-name.bin", CHIPDB)
+    wrong_asset_sha = hashlib.sha256(wrong_asset).hexdigest()
+    wrong_chip_sha = hashlib.sha256(CHIPDB).hexdigest()
+    store = ChipdbStore(settings, index(asset_sha=wrong_asset_sha, chip_sha=wrong_chip_sha), FakeFetch(wrong_asset))
+    with pytest.raises(ChipdbError, match="malformed"):
+        await store.ensure("xc7a35tcpg236-1")
+    assert not (settings.chipdb_dir / "xc7a35tcpg236.bin").exists()
+
+
 def test_default_index_is_vendored_file(settings):
     s = dataclasses.replace(settings, data_dir=Path(__file__).resolve().parents[1] / "fpgaweb" / "data")
     store = ChipdbStore(s)

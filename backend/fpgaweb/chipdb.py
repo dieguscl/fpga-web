@@ -75,15 +75,18 @@ class ChipdbStore:
                 raise ChipdbError(f"could not download chip database: {e}") from e
             if _sha256(tgz) != info["asset-sha256"]:
                 raise ChipdbError("chip database download failed checksum verification")
-            with tarfile.open(tgz, "r:gz") as tf:
-                member = tf.getmember(info["chipdb"])
-                src = tf.extractfile(member)
-                if src is None:
-                    raise ChipdbError("chip database archive is malformed")
-                out = Path(tmp) / info["chipdb"]
-                with out.open("wb") as f:
-                    while chunk := src.read(1 << 20):
-                        f.write(chunk)
+            try:
+                with tarfile.open(tgz, "r:gz") as tf:
+                    member = tf.getmember(info["chipdb"])
+                    src = tf.extractfile(member)
+                    if src is None:
+                        raise ChipdbError("chip database archive is malformed")
+                    out = Path(tmp) / info["chipdb"]
+                    with out.open("wb") as f:
+                        while chunk := src.read(1 << 20):
+                            f.write(chunk)
+            except (KeyError, tarfile.TarError):
+                raise ChipdbError("chip database archive is malformed")
             if _sha256(out) != info["chipdb-sha256"]:
                 raise ChipdbError("chip database failed checksum verification")
             os.replace(out, dest)
