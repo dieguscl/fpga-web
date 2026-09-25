@@ -37,6 +37,20 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _extract(tgz: Path, member_name: str, out: Path) -> None:
+    try:
+        with tarfile.open(tgz, "r:gz") as tf:
+            member = tf.getmember(member_name)
+            src = tf.extractfile(member)
+            if src is None:
+                raise ChipdbError("chip database archive is malformed")
+            with out.open("wb") as f:
+                while chunk := src.read(1 << 20):
+                    f.write(chunk)
+    except (KeyError, tarfile.TarError):
+        raise ChipdbError("chip database archive is malformed")
+
+
 class ChipdbStore:
     def __init__(self, settings: Settings, index: dict | None = None, fetch: Fetcher | None = None):
         if index is None:
@@ -73,20 +87,14 @@ class ChipdbStore:
                 await self._fetch(url, tgz)
             except Exception as e:  # network errors surface as a build error
                 raise ChipdbError(f"could not download chip database: {e}") from e
-            if _sha256(tgz) != info["asset-sha256"]:
+            # Two sha256 passes plus a gzip extract of a 100-200 MB file are
+            # all blocking I/O/CPU work; run each off the event loop so a
+            # first-use chipdb fetch doesn't stall every other request's SSE
+            # stream and HTTP handling for the few seconds it takes.
+            if await asyncio.to_thread(_sha256, tgz) != info["asset-sha256"]:
                 raise ChipdbError("chip database download failed checksum verification")
-            try:
-                with tarfile.open(tgz, "r:gz") as tf:
-                    member = tf.getmember(info["chipdb"])
-                    src = tf.extractfile(member)
-                    if src is None:
-                        raise ChipdbError("chip database archive is malformed")
-                    out = Path(tmp) / info["chipdb"]
-                    with out.open("wb") as f:
-                        while chunk := src.read(1 << 20):
-                            f.write(chunk)
-            except (KeyError, tarfile.TarError):
-                raise ChipdbError("chip database archive is malformed")
-            if _sha256(out) != info["chipdb-sha256"]:
+            out = Path(tmp) / info["chipdb"]
+            await asyncio.to_thread(_extract, tgz, info["chipdb"], out)
+            if await asyncio.to_thread(_sha256, out) != info["chipdb-sha256"]:
                 raise ChipdbError("chip database failed checksum verification")
             os.replace(out, dest)
