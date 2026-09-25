@@ -1,0 +1,7 @@
+// On board 27Mhz oscilator.
+IO_LOC "sys_clk"   52;
+IO_PORT "sys_clk" IO_TYPE=LVCMOS33 PULL_MODE=NONE;
+
+// LED
+IO_LOC  "led"  10;
+IO_PORT "led"  IO_TYPE=LVCMOS33  PULL_MODE=UP  DRIVE=8;

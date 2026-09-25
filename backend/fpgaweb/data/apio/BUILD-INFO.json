@@ -1,0 +1,13 @@
+{
+  "package-name"        : "definitions",
+  "description"         : "Apio definitions package",
+  "release-tag"         : "2026-09-17",
+  "target-platform"     : "all",
+  "build-repo"          : "FPGAwars/apio-definitions",
+  "build-workflow"      : "build-pre-release",
+  "workflow-run-id"     : "35254298592",
+  "workflow-run-number" : "282",
+  "build-time"          : "2026-09-17 17:42:06 UTC",
+  "commit"              : "2fd2c66575c775810aacfa1e174b377ec711f6a4",
+  "file-name"           : "apio-definitions-20260917.tgz"
+}

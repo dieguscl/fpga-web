@@ -1,0 +1,1004 @@
+// Apio boards definitions.
+// These FPGAs are referred to from boards.jsonc.
+//
+// COMMON-FIELDS:
+//    'fpga_id': These are the entries keys. They equal to the part number
+//        converted to lower-case-0-9 with an optional suffix denoting a
+//        variant, e.g. '-8k' when oversizing a 4k device to act as a 8k
+//        device.
+//
+//    'part-num': The exact and complete part number, without the delivery
+//        information such as tape vs tray.
+//
+//    'arch': The architecture group of the FPGA, This determines the semantic
+//        of its fields and the toolchain commands that are used to process it.
+//
+//    'size': The device size class. As of Jan 2024, this field is for
+//        information only and doesn't affect the operation of the
+//        toolchain.
+//
+// The reset of the fields are architecture specific and are described in each
+// architecture section below.
+//
+//
+// ============= ICE40 ARCHITECTURE
+//
+// Architecture specific params:
+//    'type': TBD
+//    'pack': TBD
+//
+{
+  "ice40lp1k-swg16tr": {
+    "part-num": "ICE40LP1K-SWG16TR",
+    "arch": "ice40",
+    "size": "1k",
+    "ice40-params": {
+      "type": "lp1k",
+      "package": "swg16tr"
+    }
+  },
+  "ice40lp384-cm36": {
+    "part-num": "ICE40LP384-CM36",
+    "arch": "ice40",
+    "size": "384",
+    "ice40-params": {
+      "type": "lp384",
+      "package": "cm36"
+    }
+  },
+  "ice40lp1k-cm36": {
+    "part-num": "ICE40LP1K-CM36",
+    "arch": "ice40",
+    "size": "1k",
+    "ice40-params": {
+      "type": "lp1k",
+      "package": "cm36"
+    }
+  },
+  "ice40ul1k-cm36a": {
+    "part-num": "ICE40UL1K-CM36A",
+    "arch": "ice40",
+    "size": "1k",
+    "ice40-params": {
+      "type": "ul1k",
+      "package": "cm36a"
+    }
+  },
+  "ice40lp384-cm49": {
+    "part-num": "ICE40LP384-CM49",
+    "arch": "ice40",
+    "size": "384",
+    "ice40-params": {
+      "type": "lp384",
+      "package": "cm49"
+    }
+  },
+  "ice40lp1k-cm49": {
+    "part-num": "ICE40LP1K-CM49",
+    "arch": "ice40",
+    "size": "1k",
+    "ice40-params": {
+      "type": "lp1k",
+      "package": "cm49"
+    }
+  },
+  "ice40lp1k-cm81": {
+    "part-num": "ICE40LP1K-CM81",
+    "arch": "ice40",
+    "size": "1k",
+    "ice40-params": {
+      "type": "lp1k",
+      "package": "cm81"
+    }
+  },
+  "ice40lp4k-cm81": {
+    "part-num": "ICE40LP4K-CM81",
+    "arch": "ice40",
+    "size": "4k",
+    "ice40-params": {
+      "type": "lp4k",
+      "package": "cm81"
+    }
+  },
+  // This is a 4k fpga that is oversized to 8k.
+  "ice40lp4k-cm81-8k": {
+    "part-num": "ICE40LP4K-CM81",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "lp8k",
+      "package": "cm81:4k"
+    }
+  },
+  "ice40lp8k-cm81": {
+    "part-num": "ICE40LP8K-CM81",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "lp8k",
+      "package": "cm81"
+    }
+  },
+  "ice40lp1k-cm121": {
+    "part-num": "ICE40LP1K-CM121",
+    "arch": "ice40",
+    "size": "1k",
+    "ice40-params": {
+      "type": "lp1k",
+      "package": "cm121"
+    }
+  },
+  "ice40lp4k-cm121": {
+    "part-num": "ICE40LP4K-CM121",
+    "arch": "ice40",
+    "size": "4k",
+    "ice40-params": {
+      "type": "lp4k",
+      "package": "cm121"
+    }
+  },
+  // This is a 4k fpga that is oversized to 8k.
+  "ice40lp4k-cm121-8k": {
+    "part-num": "ICE40LP4K-CM121",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "lp8k",
+      "package": "cm121:4k"
+    }
+  },
+  "ice40lp8k-cm121": {
+    "part-num": "ICE40LP8K-CM121",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "lp8k",
+      "package": "cm121"
+    }
+  },
+  "ice40lp4k-cm225": {
+    "part-num": "ICE40LP4K-CM225",
+    "arch": "ice40",
+    "size": "4k",
+    "ice40-params": {
+      "type": "lp4k",
+      "package": "cm225"
+    }
+  },
+  // This is a 4k fpga that is oversized to 8k.
+  "ice40lp4k-cm225-8k": {
+    "part-num": "ICE40LP4K-CM225",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "lp8k",
+      "package": "cm225:4k"
+    }
+  },
+  "ice40lp8k-cm225": {
+    "part-num": "ICE40LP8K-CM225",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "lp8k",
+      "package": "cm225"
+    }
+  },
+  "ice40hx8k-cm225": {
+    "part-num": "ICE40HX8K-CM225",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "hx8k",
+      "package": "cm225"
+    }
+  },
+  "ice40lp384-qn32": {
+    "part-num": "ICE40LP384-QN32",
+    "arch": "ice40",
+    "size": "384",
+    "ice40-params": {
+      "type": "lp384",
+      "package": "qn32"
+    }
+  },
+  "ice40lp1k-qn84": {
+    "part-num": "ICE40LP1K-QN84",
+    "arch": "ice40",
+    "size": "1k",
+    "ice40-params": {
+      "type": "lp1k",
+      "package": "qn84"
+    }
+  },
+  "ice40lp1k-cb81": {
+    "part-num": "ICE40LP1K-CB81",
+    "arch": "ice40",
+    "size": "1k",
+    "ice40-params": {
+      "type": "lp1k",
+      "package": "cb81"
+    }
+  },
+  "ice40lp1k-cb121": {
+    "part-num": "ICE40LP1K-CB121",
+    "arch": "ice40",
+    "size": "1k",
+    "ice40-params": {
+      "type": "lp1k",
+      "package": "cb121"
+    }
+  },
+  "ice40hx1k-cb132": {
+    "part-num": "ICE40HX1K-CB132",
+    "arch": "ice40",
+    "size": "1k",
+    "ice40-params": {
+      "type": "hx1k",
+      "package": "cb132"
+    }
+  },
+  "ice40hx4k-cb132": {
+    "part-num": "ICE40HX4K-CB132",
+    "arch": "ice40",
+    "size": "4k",
+    "ice40-params": {
+      "type": "hx4k",
+      "package": "cb132"
+    }
+  },
+  // This is a 4k fpga that is oversized to 8k.
+  "ice40hx4k-cb132-8k": {
+    "part-num": "ICE40HX4K-CB132",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "hx8k",
+      "package": "cb132:4k"
+    }
+  },
+  "ice40hx8k-cb132": {
+    "part-num": "ICE40HX8K-CB132",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "hx8k",
+      "package": "cb132"
+    }
+  },
+  "ice40hx1k-vq100": {
+    "part-num": "ICE40HX1K-VQ100",
+    "arch": "ice40",
+    "size": "1k",
+    "ice40-params": {
+      "type": "hx1k",
+      "package": "vq100"
+    }
+  },
+  "ice40hx1k-tq144": {
+    "part-num": "ICE40HX1K-TQ144",
+    "arch": "ice40",
+    "size": "1k",
+    "ice40-params": {
+      "type": "hx1k",
+      "package": "tq144"
+    }
+  },
+  "ice40hx4k-tq144": {
+    "part-num": "ICE40HX4K-TQ144",
+    "arch": "ice40",
+    "size": "4k",
+    "ice40-params": {
+      "type": "hx4k",
+      "package": "tq144"
+    }
+  },
+  // This is a 4k fpga that is oversized to 8k.
+  "ice40hx4k-tq144-8k": {
+    "part-num": "ICE40HX4K-TQ144",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "hx8k",
+      "package": "tq144:4k"
+    }
+  },
+  "ice40hx4k-bg121": {
+    "part-num": "ICE40HX4K-BG121",
+    "arch": "ice40",
+    "size": "4k",
+    "ice40-params": {
+      "type": "hx4k",
+      "package": "bg121"
+    }
+  },
+  // This is a 4k fpga that is oversized to 8k.
+  "ice40hx4k-bg121-8k": {
+    "part-num": "ICE40HX4K-BG121",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "hx8k",
+      "package": "bg121:4k"
+    }
+  },
+  "ice40hx8k-ct256": {
+    "part-num": "ICE40HX8K-CT256",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "hx8k",
+      "package": "ct256"
+    }
+  },
+  "ice40hx8k-bg121": {
+    "part-num": "ICE40HX8K-BG121",
+    "arch": "ice40",
+    "size": "8k",
+    "ice40-params": {
+      "type": "hx8k",
+      "package": "bg121"
+    }
+  },
+  "ice40up5k-sg48": {
+    "part-num": "ICE40UP5K-SG48",
+    "arch": "ice40",
+    "size": "5k",
+    "ice40-params": {
+      "type": "up5k",
+      "package": "sg48"
+    }
+  },
+  "ice40up5k-uwg30": {
+    "part-num": "ICE40UP5K-UWG30",
+    "arch": "ice40",
+    "size": "5k",
+    "ice40-params": {
+      "type": "up5k",
+      "package": "uwg30"
+    }
+  },
+  "ice5lp4k-sg48": {
+    "part-num": "ICE5LP4K-SG48",
+    "arch": "ice40",
+    "size": "4k",
+    "ice40-params": {
+      "type": "u4k",
+      "package": "sg48"
+    }
+  },
+  //
+  //
+  // ============= ECP5 ARCHITECTURE
+  //
+  // Architecture specific params:
+  //    'type':     TBD
+  //    'package':  TBD
+  //    'speed':    TBD
+  //
+  "lfe5u-12f-6bg256c": {
+    "part-num": "LFE5U-12F-6BG256C",
+    "arch": "ecp5",
+    "size": "12k",
+    "ecp5-params": {
+      "type": "12k",
+      "package": "CABGA256",
+      "speed": "6"
+    }
+  },
+  "lfe5u-12f-6bg381c": {
+    "part-num": "LFE5U-12F-6BG381C",
+    "arch": "ecp5",
+    "size": "12k",
+    "ecp5-params": {
+      "type": "12k",
+      "package": "CABGA381",
+      "speed": "6"
+    }
+  },
+  "lfe5u-12f-6mg285c": {
+    "part-num": "LFE5U-12F-6MG285C",
+    "arch": "ecp5",
+    "size": "12k",
+    "ecp5-params": {
+      "type": "12k",
+      "package": "CSFBGA285",
+      "speed": "6"
+    }
+  },
+  "lfe5u-25f-6bg256c": {
+    "part-num": "LFE5U-25F-6BG256C",
+    "arch": "ecp5",
+    "size": "25k",
+    "ecp5-params": {
+      "type": "25k",
+      "package": "CABGA256",
+      "speed": "6"
+    }
+  },
+  "lfe5u-25f-6bg381c": {
+    "part-num": "LFE5U-25F-6BG381C",
+    "arch": "ecp5",
+    "size": "25k",
+    "ecp5-params": {
+      "type": "25k",
+      "package": "CABGA381",
+      "speed": "6"
+    }
+  },
+  "lfe5u-25f-6mg285c": {
+    "part-num": "LFE5U-25F-6MG285C",
+    "arch": "ecp5",
+    "size": "25k",
+    "ecp5-params": {
+      "type": "25k",
+      "package": "CSFBGA285",
+      "speed": "6"
+    }
+  },
+  "lfe5u-45f-6bg256c": {
+    "part-num": "LFE5U-45F-6BG256C",
+    "arch": "ecp5",
+    "size": "45k",
+    "ecp5-params": {
+      "type": "45k",
+      "package": "CABGA256",
+      "speed": "6"
+    }
+  },
+  "lfe5u-45f-6bg381c": {
+    "part-num": "LFE5U-45F-6BG381C",
+    "arch": "ecp5",
+    "size": "45k",
+    "ecp5-params": {
+      "type": "45k",
+      "package": "CABGA381",
+      "speed": "6"
+    }
+  },
+  "lfe5u-45f-6bg554c": {
+    "part-num": "LFE5U-45F-6BG554C",
+    "arch": "ecp5",
+    "size": "45k",
+    "ecp5-params": {
+      "type": "45k",
+      "package": "CABGA554",
+      "speed": "6"
+    }
+  },
+  "lfe5u-45f-6mg285c": {
+    "part-num": "LFE5U-45F-6MG285C",
+    "arch": "ecp5",
+    "size": "45k",
+    "ecp5-params": {
+      "type": "45k",
+      "package": "CSFBGA285",
+      "speed": "6"
+    }
+  },
+  "lfe5u-85f-6bg381c": {
+    "part-num": "LFE5U-85F-6BG381C",
+    "arch": "ecp5",
+    "size": "85k",
+    "ecp5-params": {
+      "type": "85k",
+      "package": "CABGA381",
+      "speed": "6"
+    }
+  },
+  "lfe5u-85f-6bg554c": {
+    "part-num": "LFE5U-85F-6BG554C",
+    "arch": "ecp5",
+    "size": "85k",
+    "ecp5-params": {
+      "type": "85k",
+      "package": "CABGA554",
+      "speed": "6"
+    }
+  },
+  "lfe5u-85f-6bg756c": {
+    "part-num": "LFE5U-85F-6BG756C",
+    "arch": "ecp5",
+    "size": "85k",
+    "ecp5-params": {
+      "type": "85k",
+      "package": "CABGA756",
+      "speed": "6"
+    }
+  },
+  "lfe5u-85f-6mg285c": {
+    "part-num": "LFE5U-85F-6MG285C",
+    "arch": "ecp5",
+    "size": "85k",
+    "ecp5-params": {
+      "type": "85k",
+      "package": "CSFBGA285",
+      "speed": "6"
+    }
+  },
+  "lfe5um-25f-6bg256c": {
+    "part-num": "LFE5UM-25F-6BG256C",
+    "arch": "ecp5",
+    "size": "25k",
+    "ecp5-params": {
+      "type": "um-25k",
+      "package": "CABGA256",
+      "speed": "6"
+    }
+  },
+  "lfe5um-25f-6bg381c": {
+    "part-num": "LFE5UM-25F-6BG381C",
+    "arch": "ecp5",
+    "size": "25k",
+    "ecp5-params": {
+      "type": "um-25k",
+      "package": "CABGA381",
+      "speed": "6"
+    }
+  },
+  "lfe5um-25f-6mg285c": {
+    "part-num": "LFE5UM-25F-6MG285C",
+    "arch": "ecp5",
+    "size": "25k",
+    "ecp5-params": {
+      "type": "um-25k",
+      "package": "CSFBGA285",
+      "speed": "6"
+    }
+  },
+  "lfe5um-45f-6bg256c": {
+    "part-num": "LFE5UM-45F-6BG256C",
+    "arch": "ecp5",
+    "size": "45k",
+    "ecp5-params": {
+      "type": "um-45k",
+      "package": "CABGA256",
+      "speed": "6"
+    }
+  },
+  "lfe5um-45f-6bg381c": {
+    "part-num": "LFE5UM-45F-6BG381C",
+    "arch": "ecp5",
+    "size": "45k",
+    "ecp5-params": {
+      "type": "um-45k",
+      "package": "CABGA381",
+      "speed": "6"
+    }
+  },
+  "lfe5um-45f-6bg554c": {
+    "part-num": "LFE5UM-45F-6BG554C",
+    "arch": "ecp5",
+    "size": "45k",
+    "ecp5-params": {
+      "type": "um-45k",
+      "package": "CABGA554",
+      "speed": "6"
+    }
+  },
+  "lfe5um-45f-6mg285c": {
+    "part-num": "LFE5UM-45F-6MG285C",
+    "arch": "ecp5",
+    "size": "45k",
+    "ecp5-params": {
+      "type": "um-45k",
+      "package": "CSFBGA285",
+      "speed": "6"
+    }
+  },
+  "lfe5um-85f-6bg381c": {
+    "part-num": "LFE5UM-85F-6BG381C",
+    "arch": "ecp5",
+    "size": "85k",
+    "ecp5-params": {
+      "type": "um-85k",
+      "package": "CABGA381",
+      "speed": "6"
+    }
+  },
+  "lfe5um-85f-6bg554c": {
+    "part-num": "LFE5UM-85F-6BG554C",
+    "arch": "ecp5",
+    "size": "85k",
+    "ecp5-params": {
+      "type": "um-85k",
+      "package": "CABGA554",
+      "speed": "6"
+    }
+  },
+  "lfe5um-85f-6bg756c": {
+    "part-num": "LFE5UM-85F-6BG756C",
+    "arch": "ecp5",
+    "size": "85k",
+    "ecp5-params": {
+      "type": "um-85k",
+      "package": "CABGA756",
+      "speed": "6"
+    }
+  },
+  "lfe5um-85f-6mg285c": {
+    "part-num": "LFE5UM-85F-6MG285C",
+    "arch": "ecp5",
+    "size": "85k",
+    "ecp5-params": {
+      "type": "um-85k",
+      "package": "CSFBGA285",
+      "speed": "6"
+    }
+  },
+  "lfe5um5g-25f-8bg256c": {
+    "part-num": "LFE5UM5G-25F-8BG256C",
+    "arch": "ecp5",
+    "size": "25k",
+    "ecp5-params": {
+      "type": "um5g-25k",
+      "package": "CABGA256",
+      "speed": "8"
+    }
+  },
+  "lfe5um5g-25f-8bg381c": {
+    "part-num": "LFE5UM5G-25F-8BG381C",
+    "arch": "ecp5",
+    "size": "25k",
+    "ecp5-params": {
+      "type": "um5g-25k",
+      "package": "CABGA381",
+      "speed": "8"
+    }
+  },
+  "lfe5um5g-25f-8mg285c": {
+    "part-num": "LFE5UM5G-25F-8MG285C",
+    "arch": "ecp5",
+    "size": "25k",
+    "ecp5-params": {
+      "type": "um5g-25k",
+      "package": "CSFBGA285",
+      "speed": "8"
+    }
+  },
+  "lfe5um5g-45f-8bg256c": {
+    "part-num": "LFE5UM5G-45F-8BG256C",
+    "arch": "ecp5",
+    "size": "45k",
+    "ecp5-params": {
+      "type": "um5g-45k",
+      "package": "CABGA256",
+      "speed": "8"
+    }
+  },
+  "lfe5um5g-45f-8bg381c": {
+    "part-num": "LFE5UM5G-45F-8BG381C",
+    "arch": "ecp5",
+    "size": "45k",
+    "ecp5-params": {
+      "type": "um5g-45k",
+      "package": "CABGA381",
+      "speed": "8"
+    }
+  },
+  "lfe5um5g-45f-8bg554c": {
+    "part-num": "LFE5UM5G-45F-8BG554C",
+    "arch": "ecp5",
+    "size": "45k",
+    "ecp5-params": {
+      "type": "um5g-45k",
+      "package": "CABGA554",
+      "speed": "8"
+    }
+  },
+  "lfe5um5g-45f-8mg285c": {
+    "part-num": "LFE5UM5G-45F-8MG285C",
+    "arch": "ecp5",
+    "size": "45k",
+    "ecp5-params": {
+      "type": "um5g-45k",
+      "package": "CSFBGA285",
+      "speed": "8"
+    }
+  },
+  "lfe5um5g-85f-8bg381c": {
+    "part-num": "LFE5UM5G-85F-8BG381C",
+    "arch": "ecp5",
+    "size": "85k",
+    "ecp5-params": {
+      "type": "um5g-85k",
+      "package": "CABGA381",
+      "speed": "8"
+    }
+  },
+  "lfe5um5g-85f-8bg554c": {
+    "part-num": "LFE5UM5G-85F-8BG554C",
+    "arch": "ecp5",
+    "size": "85k",
+    "ecp5-params": {
+      "type": "um5g-85k",
+      "package": "CABGA554",
+      "speed": "8"
+    }
+  },
+  "lfe5um5g-85f-8bg756c": {
+    "part-num": "LFE5UM5G-85F-8BG756C",
+    "arch": "ecp5",
+    "size": "85k",
+    "ecp5-params": {
+      "type": "um5g-85k",
+      "package": "CABGA756",
+      "speed": "8"
+    }
+  },
+  "lfe5um5g-85f-8mg285c": {
+    "part-num": "LFE5UM5G-85F-8MG285C",
+    "arch": "ecp5",
+    "size": "85k",
+    "ecp5-params": {
+      "type": "um5g-85k",
+      "package": "CSFBGA285",
+      "speed": "8"
+    }
+  },
+  //
+  //
+  // ============= GOWIN ARCHITECTURE
+  //
+  // See https://github.com/YosysHQ/apicula/issues/482
+  //
+  // Architecture specific params: 
+  //    'yosys-family':   The value to pass to yosys -family. Empty if none.
+  //    'nextpnr-family': The value to pass to nextpnr family, Empty if none.
+  //    'packer-device' : The value to pass to gowin_pack -d
+  //
+  "gw1n-lv1qn48c6-i5": {
+    "part-num": "GW1N-LV1QN48C6/I5",
+    "arch": "gowin",
+    "size": "1k",
+    "gowin-params": {
+      "yosys-family": "",
+      "nextpnr-family": "",
+      "packer-device": "GW1N-1"
+    }
+  },
+  "gw1nz-lv1qn48c6-i5": {
+    "part-num": "GW1NZ-LV1QN48C6/I5",
+    "arch": "gowin",
+    "size": "1k",
+    "gowin-params": {
+      "yosys-family": "",
+      "nextpnr-family": "",
+      "packer-device": "GW1NZ-1"
+    }
+  },
+  "gw1nsr-lv4cqn48pc7-i6": {
+    "part-num": "GW1NSR-LV4CQN48PC7/I6",
+    "arch": "gowin",
+    "size": "4k",
+    "gowin-params": {
+      "yosys-family": "",
+      "nextpnr-family": "",
+      "packer-device": "GW1NS-4"
+    }
+  },
+  "gw1nr-lv9qn88pc6-i5": {
+    "part-num": "GW1NR-LV9QN88PC6/I5",
+    "arch": "gowin",
+    "size": "9k",
+    "gowin-params": {
+      "yosys-family": "",
+      "nextpnr-family": "GW1N-9C",
+      "packer-device": "GW1N-9C"
+    }
+  },
+  "gw2a-lv18pg256c8-i7": {
+    "part-num": "GW2A-LV18PG256C8/I7",
+    "arch": "gowin",
+    "size": "20k",
+    "gowin-params": {
+      "yosys-family": "gw2a",
+      "nextpnr-family": "GW2A-18",
+      "packer-device": "GW2A-18"
+    }
+  },
+  "gw2ar-lv18qn88c8-i7": {
+    "part-num": "GW2AR-LV18QN88C8/I7",
+    "arch": "gowin",
+    "size": "20k",
+    "gowin-params": {
+      "yosys-family": "gw2a",
+      "nextpnr-family": "GW2A-18C",
+      "packer-device": "GW2A-18C"
+    }
+  },
+  //
+  //
+  // ============= XILINX ARCHITECTURE
+  //
+  //
+  "xc7a35tcpg236-1": {
+    "part-num": "XC7A35T-1CPG236",
+    "arch": "xilinx",
+    "size": "35k",
+    "xilinx-params": {
+      "yosys-family": "artix7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7a35tcpg236-1",
+      "speed": "1"
+    }
+  },
+  "xc7a35tcsg324-1": {
+    "part-num": "XC7A35T-1CSG324",
+    "arch": "xilinx",
+    "size": "35k",
+    "xilinx-params": {
+      "yosys-family": "artix7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7a35tcsg324-1",
+      "speed": "1"
+    }
+  },
+  "xc7a35tfgg484-2": {
+    "part-num": "XC7A35T-2FGG484",
+    "arch": "xilinx",
+    "size": "35k",
+    "xilinx-params": {
+      "yosys-family": "artix7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7a35tfgg484-2",
+      "speed": "2"
+    }
+  },
+  "xc7a35tftg256-1": {
+    "part-num": "XC7A35T-1FTG256",
+    "arch": "xilinx",
+    "size": "35k",
+    "xilinx-params": {
+      "yosys-family": "artix7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7a35tftg256-1",
+      "speed": "1"
+    }
+  },
+  "xc7a50tcsg324-1": {
+    "part-num": "XC7A50T-1CSG324",
+    "arch": "xilinx",
+    "size": "50k",
+    "xilinx-params": {
+      "yosys-family": "artix7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7a50tcsg324-1",
+      "speed": "1"
+    }
+  },
+  "xc7a50tfgg484-1": {
+    "part-num": "XC7A50T-1FGG484",
+    "arch": "xilinx",
+    "size": "50k",
+    "xilinx-params": {
+      "yosys-family": "artix7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7a50tfgg484-1",
+      "speed": "1"
+    }
+  },
+  "xc7a100tcsg324-1": {
+    "part-num": "XC7A100T-1CSG324",
+    "arch": "xilinx",
+    "size": "100k",
+    "xilinx-params": {
+      "yosys-family": "artix7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7a100tcsg324-1",
+      "speed": "1"
+    }
+  },
+  "xc7a100tftg256-1": {
+    "part-num": "XC7A100T-1FTG256",
+    "arch": "xilinx",
+    "size": "100k",
+    "xilinx-params": {
+      "yosys-family": "artix7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7a100tftg256-1",
+      "speed": "1"
+    }
+  },
+  "xc7a100tfgg484-2": {
+    "part-num": "XC7A100T-2FGG484",
+    "arch": "xilinx",
+    "size": "100k",
+    "xilinx-params": {
+      "yosys-family": "artix7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7a100tfgg484-2",
+      "speed": "2"
+    }
+  },
+  "xc7a100tfgg676-1": {
+    "part-num": "XC7A100T-1FGG676",
+    "arch": "xilinx",
+    "size": "100k",
+    "xilinx-params": {
+      "yosys-family": "artix7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7a100tfgg676-1",
+      "speed": "1"
+    }
+  },
+  "xc7a200tfbg484-3": {
+    "part-num": "XC7A200T-3FBG484",
+    "arch": "xilinx",
+    "size": "200k",
+    "xilinx-params": {
+      "yosys-family": "artix7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7a200tfbg484-3",
+      "speed": "3"
+    }
+  },
+  // Same package as above, -2 speed grade (ZXTres++); the chipdb .bin is
+  // shared, only fasm2frames/xc7frames2bit use the speed
+  "xc7a200tfbg484-2": {
+    "part-num": "XC7A200T-2FBG484",
+    "arch": "xilinx",
+    "size": "200k",
+    "xilinx-params": {
+      "yosys-family": "artix7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7a200tfbg484-2",
+      "speed": "2"
+    }
+  },
+  "xc7s25csga324-1": {
+    "part-num": "XC7S25-1CSGA324",
+    "arch": "xilinx",
+    "size": "25k",
+    "xilinx-params": {
+      "yosys-family": "spartan7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7s25csga324-1",
+      "speed": "1"
+    }
+  },
+  "xc7s50csga324-1": {
+    "part-num": "XC7S50-1CSGA324",
+    "arch": "xilinx",
+    "size": "50k",
+    "xilinx-params": {
+      "yosys-family": "spartan7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7s50csga324-1",
+      "speed": "1"
+    }
+  },
+  "xc7z010clg400-1": {
+    "part-num": "XC7Z010-1CLG400",
+    "arch": "xilinx",
+    "size": "28k",
+    "xilinx-params": {
+      "yosys-family": "zynq7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7z010clg400-1",
+      "speed": "1"
+    }
+  },
+  "xc7z020clg484-1": {
+    "part-num": "XC7Z020-1CLG484",
+    "arch": "xilinx",
+    "size": "85k",
+    "xilinx-params": {
+      "yosys-family": "zynq7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7z020clg484-1",
+      "speed": "1"
+    }
+  },
+  "xc7z020clg400-1": {
+    "part-num": "XC7Z020-1CLG400",
+    "arch": "xilinx",
+    "size": "85k",
+    "xilinx-params": {
+      "yosys-family": "zynq7",
+      "yosys-arch": "xc7",
+      "yosys-part": "xc7z020clg400-1",
+      "speed": "1"
+    }
+  }
+}

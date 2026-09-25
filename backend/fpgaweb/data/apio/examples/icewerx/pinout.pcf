@@ -1,0 +1,17 @@
+# -----------------------------------------------------------------------------
+#- iceWerx constraint file (.pcf)
+#- By Juan Gonzalez (Obijuan) 
+#- April - 2022
+#- GPL license
+# -----------------------------------------------------------------------------
+
+
+# ------------ User Leds ------------------------------------------------------
+#-- Red LED
+set_io -nowarn LEDR A5  # output
+
+#-- Green LED
+set_io -nowarn LEDG M4  # output
+
+#-- 12 Mhz clock 
+set_io -nowarn CLK	P7 # input
