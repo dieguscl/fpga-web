@@ -59,6 +59,12 @@ spec:
           readinessProbe:
             httpGet: {path: /api/boards, port: 8000}
             periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/boards, port: 8000}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+            initialDelaySeconds: 20
           volumeMounts:
             - {name: chipdb, mountPath: /var/lib/fpgaweb/chipdb}
             - {name: jobs, mountPath: /var/lib/fpgaweb/jobs}
