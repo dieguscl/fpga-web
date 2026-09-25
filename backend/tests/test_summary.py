@@ -1,4 +1,6 @@
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 from fpgaweb.summary import read_summary
 
@@ -41,6 +43,24 @@ def test_non_numeric_used_value_is_skipped(tmp_path):
 def test_non_numeric_achieved_value_is_skipped(tmp_path):
     p = tmp_path / "report.json"
     p.write_text(json.dumps({"fmax": {"c": {"achieved": "n/a"}}}))
+    assert read_summary(p) == {"utilization": {}, "fmax": {}}
+
+
+def test_fifo_report_does_not_hang_and_yields_empty_summary(tmp_path):
+    # A sandboxed step could plant a FIFO at report.json instead of a regular
+    # file; opening it must not block the caller. Run it in a worker thread
+    # with a hard timeout so the test itself fails loudly instead of hanging
+    # if the safety check regresses.
+    p = tmp_path / "report.json"
+    os.mkfifo(p)
+    with ThreadPoolExecutor(1) as ex:
+        result = ex.submit(read_summary, p).result(timeout=5)
+    assert result == {"utilization": {}, "fmax": {}}
+
+
+def test_oversized_report_is_ignored(tmp_path):
+    p = tmp_path / "report.json"
+    p.write_text("x" * (2 * 1024 * 1024))
     assert read_summary(p) == {"utilization": {}, "fmax": {}}
 
 

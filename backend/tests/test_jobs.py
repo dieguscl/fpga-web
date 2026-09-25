@@ -1,5 +1,6 @@
 import asyncio
 import dataclasses
+import os
 
 import pytest
 
@@ -258,6 +259,25 @@ async def test_symlinked_bitstream_is_rejected(make, registry, tmp_path):
     events = await drain(job)
     assert events[-1] == {"type": "error", "message": "no bitstream was produced"}
     assert job.state is JobState.FAILED and job.bitstream is None
+
+
+async def test_fifo_report_does_not_hang_the_job(make, registry):
+    class FifoReportRunner(FakeRunner):
+        async def __call__(self, argv, cwd, settings, on_line, stdout_file=None):
+            self.calls.append(argv)
+            for i in range(self.lines):
+                on_line(f"{argv[0]} line {i}")
+            if argv[0] == "icepack":
+                (cwd / "hw.bin").write_bytes(b"\x7e\xaa\x99\x7e")
+            if argv[0].startswith("nextpnr"):
+                os.mkfifo(cwd / "report.json")
+            return RunResult(0)
+
+    m = await make(FifoReportRunner())
+    job = m.submit("ip", registry.get("icebreaker"), "main", FILES, lint=False)
+    events = await asyncio.wait_for(drain(job), timeout=5)
+    assert events[-1] == {"type": "done", "bitstream": "hw.bin", "summary": {"utilization": {}, "fmax": {}}}
+    assert job.state is JobState.DONE
 
 
 async def test_symlinked_report_is_ignored(make, registry, tmp_path):

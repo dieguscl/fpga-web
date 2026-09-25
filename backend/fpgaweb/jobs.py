@@ -273,13 +273,14 @@ class JobManager:
             return self._fail(job, "no bitstream was produced")
 
         report_path = job.dir / REPORT
-        if report_path.is_symlink():
+        try:
+            # read_summary() itself refuses symlinks/FIFOs/oversized files
+            # (O_NOFOLLOW|O_NONBLOCK + a size cap); run it in a thread so a
+            # large-but-permitted report.json can't stall the event loop
+            # while it's parsed.
+            summary = await asyncio.to_thread(read_summary, report_path)
+        except Exception:
             summary = {"utilization": {}, "fmax": {}}
-        else:
-            try:
-                summary = read_summary(report_path)
-            except Exception:
-                summary = {"utilization": {}, "fmax": {}}
 
         # Keep only the bitstream: every intermediate (sources, hw.json,
         # report.json, ...) is worthless once the build has succeeded, and
