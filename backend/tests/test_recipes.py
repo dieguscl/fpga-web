@@ -86,6 +86,7 @@ def test_lint_step_first_with_vlt_waiver(registry, settings):
     assert "--lint-only" in lint.argv and "--top-module" in lint.argv
     assert "lint.vlt" in lint.argv and "main.v" in lint.argv
     assert str(settings.yosys_share / "ice40" / "cells_sim.v") in lint.argv
+    assert f"-I{settings.yosys_share / 'ice40'}" in lint.argv
     assert f'lint_off -file "{settings.yosys_share}/*"' in p.extra_files["lint.vlt"]
 
 
@@ -111,6 +112,9 @@ def test_lint_ecp5(registry, settings):
     lint = p.steps[0]
     assert "-DAPIO_SIM=0" in lint.argv
     assert str(settings.yosys_share / "ecp5" / "cells_bb.v") in lint.argv
+    # ecp5's cells_sim.v `includes sibling headers (common_sim.vh, cells_ff.vh, ...) by bare
+    # name; verilator only resolves those against an explicit -I search path.
+    assert f"-I{settings.yosys_share / 'ecp5'}" in lint.argv
 
 
 def test_lint_gowin(registry, settings):

@@ -50,7 +50,7 @@ def _lint(board: Board, top: str, srcs: list[str], s: Settings) -> tuple[Step, d
     argv = [
         "verilator", "--lint-only", "--quiet", "--bbox-unsup", "--timing",
         "-Wno-TIMESCALEMOD", "-Wno-MULTITOP", "-Wno-fatal", "-DSYNTHESIZE", "-DAPIO_SIM=0",
-        "--top-module", top, "lint.vlt", *_lint_libs(board, s), *srcs,
+        f"-I{s.yosys_share / board.arch}", "--top-module", top, "lint.vlt", *_lint_libs(board, s), *srcs,
     ]
     return Step("lint", argv), {"lint.vlt": vlt}
 
