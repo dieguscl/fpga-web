@@ -16,6 +16,6 @@ for dir in "$SRC"/definitions/examples/*/blinky; do
 done
 cat > "$DST/NOTICE.md" <<'EOF'
 Files in this directory are copied from the Apio project
-(https://github.com/FPGAwars/apio), licensed under GPL-2.0 (see LICENSE).
+(https://github.com/FPGAwars/apio), licensed under GPL-3.0 (see LICENSE).
 EOF
 echo "vendored $(ls "$DST/examples" | wc -l) examples into $DST"

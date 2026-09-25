@@ -14,4 +14,7 @@ cd ../frontend && npm install && npm run dev                      # UI on :5173
 ```
 Integration tests (real toolchains from `~/.apio`): `source backend/dev.env && FPGAWEB_INTEGRATION=1 backend/.venv/bin/pytest -m integration`.
 
-Board definitions and examples come from [Apio](https://github.com/FPGAwars/apio) (GPL-2.0).
+Board definitions and examples come from [Apio](https://github.com/FPGAwars/apio).
+
+## License
+GPL-3.0-or-later (see `LICENSE`). Board definitions and examples in `backend/fpgaweb/data/apio/` are from Apio, also GPL-3.0.
