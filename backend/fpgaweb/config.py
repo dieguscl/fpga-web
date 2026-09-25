@@ -29,6 +29,7 @@ class Settings:
     cpu_s: int = 90
     mem_bytes: int = 4 * 1024**3
     fsize_bytes: int = 200 * 1024**2
+    max_job_dir_bytes: int = 300 * 1024**2
     max_log_lines: int = 5000
     max_line_chars: int = 2000
     rate_n: int = 10

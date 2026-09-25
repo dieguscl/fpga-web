@@ -3,6 +3,7 @@
 import asyncio
 import enum
 import logging
+import os
 import secrets
 import shutil
 import time
@@ -39,6 +40,56 @@ class JobState(str, enum.Enum):
 
 class QueueFull(Exception):
     pass
+
+
+def _dir_size(path: Path) -> int:
+    """Total bytes of regular files directly and transitively under `path`.
+
+    Walks with `os.scandir` and never follows symlinks -- a sandboxed step
+    could otherwise plant a symlink pointing outside the job dir (or at a
+    device node), and following it would either loop forever or attribute
+    someone else's disk usage to this job.
+    """
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                try:
+                    if entry.is_symlink():
+                        continue
+                    if entry.is_dir(follow_symlinks=False):
+                        total += _dir_size(Path(entry.path))
+                    else:
+                        total += entry.stat(follow_symlinks=False).st_size
+                except OSError:
+                    continue
+    except OSError:
+        return total
+    return total
+
+
+def _keep_only(path: Path, keep_name: str) -> None:
+    """Delete everything directly under `path` except the entry named `keep_name`.
+
+    Used once a build succeeds: the bitstream is the only output worth
+    keeping, and every intermediate (hw.json, report.json, the original
+    sources, ...) can go so a busy server doesn't fill the job-dir volume.
+    """
+    try:
+        with os.scandir(path) as it:
+            entries = list(it)
+    except OSError:
+        return
+    for entry in entries:
+        if entry.name == keep_name:
+            continue
+        try:
+            if not entry.is_symlink() and entry.is_dir(follow_symlinks=False):
+                shutil.rmtree(entry.path, ignore_errors=True)
+            else:
+                os.unlink(entry.path)
+        except OSError:
+            continue
 
 
 @dataclass(eq=False)
@@ -179,6 +230,10 @@ class JobManager:
     def _fail(self, job: Job, message: str) -> None:
         job.state = JobState.FAILED
         job.emit({"type": "error", "message": message})
+        # Drop every intermediate immediately -- a failed job keeps no
+        # bitstream worth keeping, and letting it sit around until job_ttl_s
+        # elapses is how the job-dir volume fills up and evicts the pod.
+        shutil.rmtree(job.dir, ignore_errors=True)
 
     async def _execute(self, job: Job) -> None:
         job.state = JobState.RUNNING
@@ -210,6 +265,8 @@ class JobManager:
                     reason = _KILL_TEXT[res.killed].format(wall=self._s.wall_s)
                     return self._fail(job, f"{step.name} {reason}")
                 return self._fail(job, f"{step.name} failed (exit code {res.exit_code})")
+            if _dir_size(job.dir) > self._s.max_job_dir_bytes:
+                return self._fail(job, f"{step.name} exceeded the disk limit")
 
         out = job.dir / plan.output
         if out.is_symlink() or not out.is_file() or out.stat().st_size == 0:
@@ -224,6 +281,11 @@ class JobManager:
             except Exception:
                 summary = {"utilization": {}, "fmax": {}}
 
+        # Keep only the bitstream: every intermediate (sources, hw.json,
+        # report.json, ...) is worthless once the build has succeeded, and
+        # leaving them around until job_ttl_s is how the job-dir volume
+        # fills up and evicts the pod.
+        _keep_only(job.dir, out.name)
         job.bitstream = out
         job.state = JobState.DONE
         job.emit({"type": "done", "summary": summary, "bitstream": plan.output})

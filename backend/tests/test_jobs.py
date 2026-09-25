@@ -66,7 +66,6 @@ async def test_successful_build(make, registry):
     assert events[-1] == {"type": "done", "bitstream": "hw.bin",
                           "summary": {"utilization": {"LC": {"used": 5, "available": 10}}, "fmax": {}}}
     assert job.state is JobState.DONE and job.bitstream.read_bytes() == b"\x7e\xaa\x99\x7e"
-    assert (job.dir / "main.v").read_text() == FILES["main.v"]
 
 
 async def test_failed_step_stops_build(make, registry):
@@ -196,6 +195,44 @@ async def test_sweep_removes_expired_jobs(settings, registry):
         assert m.get(job.id) is None and not job.dir.exists()
     finally:
         await m.stop()
+
+
+# --- Job-dir disk hygiene (final review Issue #2) ---
+
+
+async def test_failed_job_dir_removed_immediately(make, registry):
+    m = await make(FakeRunner(fail_step="nextpnr-ice40"))
+    job = m.submit("ip", registry.get("icebreaker"), "main", FILES, lint=False)
+    await drain(job)
+    assert job.state is JobState.FAILED
+    assert not job.dir.exists()
+
+
+async def test_success_keeps_only_the_bitstream(make, registry):
+    m = await make(FakeRunner())
+    job = m.submit("ip", registry.get("icebreaker"), "main", FILES, lint=False)
+    await drain(job)
+    assert job.state is JobState.DONE
+    assert {p.name for p in job.dir.iterdir()} == {"hw.bin"}
+    assert job.bitstream.read_bytes() == b"\x7e\xaa\x99\x7e"
+
+
+async def test_job_dir_over_size_limit_fails_and_removes_dir(make, registry):
+    class BigFileRunner(FakeRunner):
+        async def __call__(self, argv, cwd, settings, on_line, stdout_file=None):
+            self.calls.append(argv)
+            for i in range(self.lines):
+                on_line(f"{argv[0]} line {i}")
+            if argv[0] == "yosys":
+                (cwd / "big.bin").write_bytes(b"0" * 1000)
+            return RunResult(0)
+
+    m = await make(BigFileRunner(), max_job_dir_bytes=100)
+    job = m.submit("ip", registry.get("icebreaker"), "main", FILES, lint=False)
+    events = await drain(job)
+    assert events[-1] == {"type": "error", "message": "synth exceeded the disk limit"}
+    assert job.state is JobState.FAILED and job.bitstream is None
+    assert not job.dir.exists()
 
 
 # --- Controller rulings: symlink safety and precise failure messages ---
