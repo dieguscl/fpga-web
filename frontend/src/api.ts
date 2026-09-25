@@ -52,13 +52,26 @@ export function submitBuild(req: { board: string; top: string; files: Record<str
   }).then((r) => json<{ job_id: string; queue_position: number }>(r));
 }
 
-export function streamEvents(jobId: string, onEvent: (ev: BuildEvent) => void): () => void {
+export function streamEvents(jobId: string, onEvent: (ev: BuildEvent) => void, onError?: (message: string) => void): () => void {
   const es = new EventSource(`/api/jobs/${encodeURIComponent(jobId)}/events`);
+  let errorCount = 0;
+
   es.onmessage = (m) => {
+    errorCount = 0;
     const ev = JSON.parse(m.data) as BuildEvent;
     onEvent(ev);
     if (ev.type === 'done' || ev.type === 'error') es.close();
   };
+
+  es.onerror = () => {
+    errorCount++;
+    if (es.readyState === 2 || errorCount >= 5) {
+      es.close();
+      onEvent({ type: 'error', message: 'lost connection to the build server' });
+      onError?.('lost connection to the build server');
+    }
+  };
+
   return () => es.close();
 }
 
