@@ -57,6 +57,11 @@ def test_nul_byte_rejected(basys3):
         validate_files(basys3, "main", ok(**{"x.v": "a\x00b"}))
 
 
+def test_lone_surrogate_rejected(basys3):
+    with pytest.raises(ValidationError, match="UTF-8"):
+        validate_files(basys3, "main", ok(**{"x.v": "\ud800"}))
+
+
 def test_wrong_constraint_type_for_board(basys3):
     with pytest.raises(ValidationError, match=r"\.xdc"):
         validate_files(basys3, "main", {"main.v": V, "pins.pcf": ""})

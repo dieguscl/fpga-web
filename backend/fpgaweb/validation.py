@@ -54,7 +54,12 @@ def validate_files(board: Board, top: str, files: dict[str, str]) -> dict[str, s
             raise ValidationError(f"file extension must be lower-case: {name!r}")
         if "\x00" in text:
             raise ValidationError(f"{name} looks binary (contains NUL bytes)")
-        total += len(text.encode("utf-8"))
+        try:
+            total += len(text.encode("utf-8"))
+        except UnicodeEncodeError:
+            # A lone/unpaired surrogate (e.g. "\ud800") survives JSON
+            # decoding into a Python str but can't be encoded as UTF-8.
+            raise ValidationError(f"{name} is not valid UTF-8")
         out[name] = _normalise(text)
     if total > MAX_TOTAL_BYTES:
         raise ValidationError("project is larger than 1 MB")

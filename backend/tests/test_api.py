@@ -111,6 +111,19 @@ async def test_validation_error_is_400(client):
     assert r.status_code == 400 and ".pcf" in r.json()["detail"]
 
 
+async def test_lone_surrogate_content_is_400(client):
+    # httpx's own json= encoding rejects a lone surrogate client-side (it
+    # encodes with ensure_ascii=False), so build the raw body by hand with
+    # ensure_ascii=True: the surrogate becomes a plain "\ud800" text escape,
+    # which decodes back into the same lone-surrogate str server-side -- the
+    # same shape Cloudflare/httpx would deliver from a real malicious client.
+    c = await client()
+    payload = json.dumps({**BODY, "files": {"main.v": "\ud800", "p.pcf": ""}}, ensure_ascii=True)
+    r = await c.post("/api/build", content=payload.encode("ascii"),
+                     headers={"content-type": "application/json"})
+    assert r.status_code == 400 and "UTF-8" in r.json()["detail"]
+
+
 async def test_unknown_board_is_400(client):
     c = await client()
     r = await c.post("/api/build", json={**BODY, "board": "nope"})
