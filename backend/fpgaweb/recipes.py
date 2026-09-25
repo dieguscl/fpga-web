@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fpgaweb.boards import Board
 from fpgaweb.config import Settings
-from fpgaweb.validation import DESIGN_EXTS, is_testbench
+from fpgaweb.validation import DESIGN_EXTS, MODULE_RE, is_testbench
 
 REPORT = "report.json"
 
@@ -35,6 +35,13 @@ def _constraint(board: Board, files: dict[str, str]) -> str:
 def _lint_libs(board: Board, s: Settings) -> list[str]:
     lib = s.yosys_share / board.arch
     extra = {"xilinx": ["cells_xtra.v"], "ecp5": ["cells_bb.v"]}.get(board.arch, [])
+    # For gowin, add family-specific black-box file if part starts with known prefix
+    if board.arch == "gowin":
+        part_upper = board.part_num.upper()
+        for prefix, family in [("GW1N", "gw1n"), ("GW2A", "gw2a"), ("GW5A", "gw5a")]:
+            if part_upper.startswith(prefix):
+                extra = [f"cells_xtra_{family}.v"]
+                break
     return [str(lib / f) for f in ["cells_sim.v", *extra]]
 
 
@@ -42,7 +49,7 @@ def _lint(board: Board, top: str, srcs: list[str], s: Settings) -> tuple[Step, d
     vlt = f'`verilator_config\nlint_off -file "{s.yosys_share}/*"\n'
     argv = [
         "verilator", "--lint-only", "--quiet", "--bbox-unsup", "--timing",
-        "-Wno-TIMESCALEMOD", "-Wno-MULTITOP", "-Wno-fatal", "-DSYNTHESIZE",
+        "-Wno-TIMESCALEMOD", "-Wno-MULTITOP", "-Wno-fatal", "-DSYNTHESIZE", "-DAPIO_SIM=0",
         "--top-module", top, "lint.vlt", *_lint_libs(board, s), *srcs,
     ]
     return Step("lint", argv), {"lint.vlt": vlt}
@@ -50,11 +57,13 @@ def _lint(board: Board, top: str, srcs: list[str], s: Settings) -> tuple[Step, d
 
 def plan_build(board: Board, top: str, files: dict[str, str], settings: Settings,
                chipdb: Path | None, lint: bool) -> BuildPlan:
+    if not MODULE_RE.fullmatch(top):
+        raise ValueError("invalid top module")
     s = settings
     p = board.params
     srcs = _sources(files)
     cons = _constraint(board, files)
-    yosys = lambda script: Step("synth", ["yosys", "-q", "-p", script, *srcs])  # noqa: E731
+    yosys = lambda script: Step("synth", ["yosys", "-q", "-DSYNTHESIZE", "-p", script, *srcs])  # noqa: E731
 
     if board.arch == "xilinx":
         if chipdb is None:
