@@ -30,7 +30,7 @@ export async function flash(board: BoardInfo, bitstream: Uint8Array, toFlash: bo
     await runOpenFPGALoader(args, { [fileName]: bitstream }, { stdout: out, stderr: out });
   } catch (e) {
     const code = (e as { code?: number }).code;
-    const message = code !== undefined ? `openFPGALoader exited with code ${code}` : String(e);
-    throw e instanceof Error ? new Error(message) : new Error(message);
+    if (code !== undefined) throw new Error(`openFPGALoader exited with code ${code}`);
+    throw e instanceof Error ? e : new Error(String(e));
   }
 }

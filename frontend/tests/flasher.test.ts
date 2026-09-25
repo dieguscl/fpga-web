@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { buildOflArgs, flash } from '../src/flasher';
+import { buildOflArgs } from '../src/flasher';
 import { detectOS, setupHelpHtml } from '../src/setup-help';
 import type { BoardInfo } from '../src/api';
 
@@ -50,6 +50,7 @@ describe('flash', () => {
 
   beforeEach(() => {
     originalNavigator = globalThis.navigator;
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -57,9 +58,11 @@ describe('flash', () => {
       value: originalNavigator,
       configurable: true,
     });
+    vi.resetModules();
   });
 
   it('rejects download-only boards without calling requestDevice', async () => {
+    const { flash } = await import('../src/flasher');
     const requestDeviceMock = vi.fn();
     Object.defineProperty(globalThis, 'navigator', {
       value: { usb: { requestDevice: requestDeviceMock } },
@@ -69,5 +72,35 @@ describe('flash', () => {
     const downloadOnlyBoard = board({ flash: 'download' });
     await expect(flash(downloadOnlyBoard, new Uint8Array(), false, () => {})).rejects.toThrow(/download/);
     expect(requestDeviceMock).not.toHaveBeenCalled();
+  });
+
+  it('preserves original Error message from openFPGALoader', async () => {
+    const { flash } = await import('../src/flasher');
+    const { runOpenFPGALoader } = await import('@yowasp/openfpgaloader');
+    vi.mocked(runOpenFPGALoader).mockRejectedValueOnce(new Error('boom'));
+
+    const requestDeviceMock = vi.fn().mockResolvedValueOnce({});
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { usb: { requestDevice: requestDeviceMock } },
+      configurable: true,
+    });
+
+    const err = await flash(board(), new Uint8Array(), false, () => {}).catch(e => e);
+    expect(err.message).toBe('boom');
+  });
+
+  it('formats exit code errors from openFPGALoader', async () => {
+    const { flash } = await import('../src/flasher');
+    const { runOpenFPGALoader } = await import('@yowasp/openfpgaloader');
+    vi.mocked(runOpenFPGALoader).mockRejectedValueOnce({ code: 2 });
+
+    const requestDeviceMock = vi.fn().mockResolvedValueOnce({});
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { usb: { requestDevice: requestDeviceMock } },
+      configurable: true,
+    });
+
+    const err = await flash(board(), new Uint8Array(), false, () => {}).catch(e => e);
+    expect(err.message).toBe('openFPGALoader exited with code 2');
   });
 });
