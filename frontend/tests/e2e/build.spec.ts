@@ -2,6 +2,10 @@ import { expect, test } from '@playwright/test';
 
 test('new basys3 project builds and offers a download', async ({ page }) => {
   await page.goto('/');
+  // Browser flashing needs a cross-origin isolated page (@yowasp/openfpgaloader
+  // allocates a SharedArrayBuffer-backed WebAssembly.Memory); the backend sets
+  // COOP/COEP on every response, including this static shell, to get there.
+  expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
   await page.selectOption('#board', 'basys3');
   page.once('dialog', (d) => d.accept('blink'));
   await page.click('#new-project');
