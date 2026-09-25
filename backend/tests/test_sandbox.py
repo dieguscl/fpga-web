@@ -1,7 +1,10 @@
+import asyncio
 import dataclasses
+import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -103,3 +106,69 @@ async def test_bwrap_job_dir_writable_and_isolated(tmp_path, settings):
     assert res.exit_code == 0 and (tmp_path / "ok.txt").read_text() == "1"
     res, _ = await collect(["python3", "-c", f"open('{Path.home()}/x','w')"], tmp_path, s)
     assert res.exit_code != 0
+
+
+def _wait_process_gone(pid: int, tries: int = 200, delay: float = 0.05) -> bool:
+    for _ in range(tries):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(delay)
+    return False
+
+
+async def test_cancel_kills_process_tree(tmp_path, settings):
+    script = "import os,time;open('pid.txt','w').write(str(os.getpid()));time.sleep(30)"
+    task = asyncio.ensure_future(run_step([PY, "-c", script], tmp_path, settings, lambda l: None))
+    pid_file = tmp_path / "pid.txt"
+    for _ in range(200):
+        if pid_file.exists() and pid_file.read_text():
+            break
+        await asyncio.sleep(0.02)
+    else:
+        pytest.fail("child never reported its pid")
+    pid = int(pid_file.read_text())
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert _wait_process_gone(pid), "sandboxed process still alive after run_step was cancelled"
+
+
+async def test_on_line_exception_kills_process_and_propagates(tmp_path, settings):
+    script = (
+        "import os,sys,time;"
+        "open('pid.txt','w').write(str(os.getpid()));"
+        "print('go');sys.stdout.flush();"
+        "time.sleep(30)"
+    )
+
+    def boom(line: str) -> None:
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await run_step([PY, "-c", script], tmp_path, settings, boom)
+
+    pid = int((tmp_path / "pid.txt").read_text())
+    assert _wait_process_gone(pid), "sandboxed process still alive after on_line raised"
+
+
+async def test_stdout_file_rejects_path_separators(tmp_path, settings):
+    with pytest.raises(ValueError):
+        await run_step([PY, "-c", "print('x')"], tmp_path, settings, lambda l: None,
+                        stdout_file="sub/out.txt")
+
+
+async def test_stdout_file_does_not_follow_symlink(tmp_path, tmp_path_factory, settings):
+    outside_dir = tmp_path_factory.mktemp("outside")
+    outside = outside_dir / "target.txt"
+    outside.write_text("untouched")
+    (tmp_path / "hw.frames").symlink_to(outside)
+
+    with pytest.raises(OSError):
+        await run_step([PY, "-c", "print('x')"], tmp_path, settings, lambda l: None,
+                        stdout_file="hw.frames")
+
+    assert outside.read_text() == "untouched"

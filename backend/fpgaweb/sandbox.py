@@ -1,12 +1,13 @@
 """Run one toolchain command in a bubblewrap sandbox with resource limits."""
 
 import asyncio
+import contextlib
 import os
 import resource
 import signal
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import BinaryIO, Callable
 
 from fpgaweb.config import Settings
 
@@ -53,6 +54,24 @@ def _kill_group(proc: asyncio.subprocess.Process) -> None:
         pass
 
 
+def _open_stdout_file(cwd: Path, name: str) -> BinaryIO:
+    """Open cwd/name for the step's stdout, refusing to follow a symlink.
+
+    A prior sandboxed step could have planted a symlink at this name pointing
+    outside the job directory (e.g. into the backend's own writable files).
+    The name must be a plain filename (no path separators, not "." or "..")
+    and the open itself must fail rather than follow an existing symlink.
+    """
+    if "/" in name or name in (".", ".."):
+        raise ValueError(f"invalid stdout_file name: {name!r}")
+    fd = os.open(
+        cwd / name,
+        os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_CLOEXEC,
+        0o644,
+    )
+    return os.fdopen(fd, "wb")
+
+
 def _classify(rc: int, oom: bool) -> str | None:
     if rc == 0:
         return None
@@ -70,7 +89,7 @@ async def run_step(argv: list[str], cwd: Path, settings: Settings,
     env = None
     if settings.sandbox == "none":
         env = {"PATH": settings.tool_path, "HOME": str(cwd), "LANG": "C.UTF-8"}
-    out_f = open(cwd / stdout_file, "wb") if stdout_file else None
+    out_f = _open_stdout_file(cwd, stdout_file) if stdout_file else None
     try:
         proc = await asyncio.create_subprocess_exec(
             *sandbox_argv(argv, cwd, settings),
@@ -103,6 +122,17 @@ async def run_step(argv: list[str], cwd: Path, settings: Settings,
             _kill_group(proc)
             await proc.wait()
             return RunResult(proc.returncode if proc.returncode is not None else -9, "timeout")
+        except BaseException:
+            # Cancellation (e.g. the caller's task was cancelled) or an
+            # exception raised from on_line() both unwind past the awaits
+            # above without the subprocess having exited. Make sure the
+            # sandboxed process tree doesn't keep running before we let the
+            # original exception/cancellation propagate.
+            if proc.returncode is None:
+                _kill_group(proc)
+                with contextlib.suppress(BaseException):
+                    await asyncio.shield(proc.wait())
+            raise
         rc = proc.returncode
         return RunResult(rc, _classify(rc, oom))
     finally:
