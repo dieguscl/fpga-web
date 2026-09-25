@@ -123,6 +123,8 @@ def _normalise_ip(ip: str) -> str:
     except ValueError:
         return ip
     if addr.version == 6:
+        if addr.ipv4_mapped is not None:  # ::ffff:a.b.c.d is an IPv4 client
+            return str(addr.ipv4_mapped)
         return str(ipaddress.ip_network(f"{ip}/64", strict=False))
     return ip
 

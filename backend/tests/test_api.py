@@ -346,3 +346,10 @@ async def test_bitstream_symlink_not_served(settings, registry, tmp_path):
             assert r.status_code == 404
     finally:
         await manager.stop()
+
+
+def test_ipv4_mapped_ipv6_is_keyed_as_ipv4():
+    from fpgaweb.api import _normalise_ip
+    assert _normalise_ip("::ffff:1.2.3.4") == "1.2.3.4"
+    assert _normalise_ip("::ffff:5.6.7.8") == "5.6.7.8"
+    assert _normalise_ip("2001:db8::1") == "2001:db8::/64"
