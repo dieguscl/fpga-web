@@ -198,6 +198,19 @@ async def test_sweep_removes_expired_jobs(settings, registry):
         await m.stop()
 
 
+async def test_build_log_line_includes_duration(make, registry, caplog):
+    import logging
+    import re
+
+    caplog.set_level(logging.INFO, logger="fpgaweb.jobs")
+    m = await make(FakeRunner())
+    job = m.submit("1.2.3.4", registry.get("icebreaker"), "main", FILES, lint=False)
+    await drain(job)
+    lines = [r.getMessage() for r in caplog.records if r.name == "fpgaweb.jobs"]
+    assert any(re.search(r"^build ip=1\.2\.3\.4 board=icebreaker state=done duration=\d+\.\d+s$", l)
+              for l in lines), lines
+
+
 # --- Job-dir disk hygiene (final review Issue #2) ---
 
 

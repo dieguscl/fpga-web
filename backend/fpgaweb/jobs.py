@@ -215,6 +215,7 @@ class JobManager:
                 self._pending.remove(job)
             for pos, other in enumerate(self._pending, start=1):
                 other.emit({"type": "queued", "position": pos})
+            started_at = self._clock()
             try:
                 await self._execute(job)
             except asyncio.CancelledError:
@@ -225,7 +226,8 @@ class JobManager:
                     self._fail(job, "internal build error")
             finally:
                 job.finished_at = self._clock()
-                log.info("build ip=%s board=%s state=%s", job.ip, job.board.id, job.state.value)
+                log.info("build ip=%s board=%s state=%s duration=%.1fs",
+                         job.ip, job.board.id, job.state.value, job.finished_at - started_at)
 
     def _fail(self, job: Job, message: str) -> None:
         job.state = JobState.FAILED
