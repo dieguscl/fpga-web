@@ -37,9 +37,8 @@ def _normalise(text: str) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
-def validate_files(board: Board, top: str, files: dict[str, str]) -> dict[str, str]:
-    if not MODULE_RE.fullmatch(top or ""):
-        raise ValidationError("top module must be a valid Verilog identifier")
+def _check_files(files: dict[str, str]) -> dict[str, str]:
+    """Per-file checks shared by builds and simulations; returns normalised files."""
     if len(files) > MAX_FILES:
         raise ValidationError(f"a project can have at most {MAX_FILES} files")
     total = 0
@@ -63,7 +62,13 @@ def validate_files(board: Board, top: str, files: dict[str, str]) -> dict[str, s
         out[name] = _normalise(text)
     if total > MAX_TOTAL_BYTES:
         raise ValidationError("project is larger than 1 MB")
+    return out
 
+
+def validate_files(board: Board, top: str, files: dict[str, str]) -> dict[str, str]:
+    if not MODULE_RE.fullmatch(top or ""):
+        raise ValidationError("top module must be a valid Verilog identifier")
+    out = _check_files(files)
     constraints = [n for n in out if _ext(n) in CONSTRAINT_EXTS]
     wrong = [n for n in constraints if _ext(n) != board.constraint_ext]
     if wrong:
@@ -74,4 +79,12 @@ def validate_files(board: Board, top: str, files: dict[str, str]) -> dict[str, s
         raise ValidationError(f"project must contain exactly one {board.constraint_ext} file")
     if not any(_ext(n) in DESIGN_EXTS and not is_testbench(n) for n in out):
         raise ValidationError("project has no Verilog design source (.v or .sv)")
+    return out
+
+
+def validate_sim_files(testbench: str, files: dict[str, str]) -> dict[str, str]:
+    """Simulation needs a testbench (*_tb.v / *_tb.sv) but no constraint file."""
+    out = _check_files(files)
+    if testbench not in out or not is_testbench(testbench):
+        raise ValidationError("choose a testbench file (a .v/.sv file whose name ends in _tb)")
     return out

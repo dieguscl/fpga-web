@@ -122,3 +122,34 @@ def test_lint_gowin(registry, settings):
     lint = p.steps[0]
     assert "-DAPIO_SIM=0" in lint.argv
     assert str(settings.yosys_share / "gowin" / "cells_xtra_gw1n.v") in lint.argv
+
+
+def test_plan_sim_uses_chosen_testbench_and_cell_library(registry, settings):
+    from fpgaweb.recipes import plan_sim
+    files = {"main.v": "module main(input clk); endmodule", "a_tb.v": "module a_tb; initial $dumpvars(0, a_tb); endmodule",
+             "b_tb.v": "module b_tb; endmodule", "p.pcf": ""}
+    p = plan_sim(registry.get("icebreaker"), "a_tb.v", files, settings)
+    compile_, run = p.steps
+    assert compile_.name == "compile" and run.argv == ["vvp", "-n", "sim.vvp"]
+    a = compile_.argv
+    assert a[:2] == ["iverilog", "-g2012"] and "-DNO_ICE40_DEFAULT_ASSIGNMENTS" in a
+    assert a[a.index("-s") + 1] == "a_tb"
+    assert a[a.index("-l") + 1] == str(settings.yosys_share / "ice40" / "cells_sim.v")
+    assert "a_tb.v" in a and "main.v" in a and "b_tb.v" not in a
+    assert p.extra_files == {}
+
+
+def test_plan_sim_adds_dump_module_when_testbench_has_no_dumpvars(registry, settings):
+    from fpgaweb.recipes import DUMP_MODULE, plan_sim
+    files = {"main.v": "", "t_tb.v": "// module fake;\nmodule t_tb; /* $dumpvars */ endmodule"}
+    p = plan_sim(registry.get("basys3"), "t_tb.v", files, settings)
+    a = p.steps[0].argv
+    assert ["-s", "t_tb", "-s", DUMP_MODULE] == a[a.index("-s"):a.index("-s") + 4]
+    assert f"{DUMP_MODULE}.v" in a
+    assert "$dumpvars(0, t_tb);" in p.extra_files[f"{DUMP_MODULE}.v"]
+
+
+def test_plan_sim_rejects_testbench_without_module(registry, settings):
+    from fpgaweb.recipes import plan_sim
+    with pytest.raises(ValueError, match="no module"):
+        plan_sim(registry.get("basys3"), "x_tb.v", {"x_tb.v": "// nothing"}, settings)

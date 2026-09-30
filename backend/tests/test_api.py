@@ -353,3 +353,32 @@ def test_ipv4_mapped_ipv6_is_keyed_as_ipv4():
     assert _normalise_ip("::ffff:1.2.3.4") == "1.2.3.4"
     assert _normalise_ip("::ffff:5.6.7.8") == "5.6.7.8"
     assert _normalise_ip("2001:db8::1") == "2001:db8::/64"
+
+
+async def test_simulate_endpoint_and_wave_download(client):
+    from tests.test_jobs import TB, VCD
+    c = await client()
+    r = await c.post("/api/simulate", json={"board": "basys3", "testbench": "main_tb.v", "files": TB})
+    assert r.status_code == 202
+    job_id = r.json()["job_id"]
+    events = sse_events((await c.get(f"/api/jobs/{job_id}/events")).text)
+    assert events[-1][1] == {"type": "done", "kind": "sim", "wave": "dump.vcd"}
+    r = await c.get(f"/api/jobs/{job_id}/wave")
+    assert r.status_code == 200 and r.text == VCD
+    assert (await c.get(f"/api/jobs/{job_id}/bitstream")).status_code == 404
+
+
+async def test_simulate_validation_and_board_errors(client):
+    from tests.test_jobs import TB
+    c = await client()
+    r = await c.post("/api/simulate", json={"board": "basys3", "testbench": "main.v", "files": TB})
+    assert r.status_code == 400 and "testbench" in r.json()["detail"]
+    r = await c.post("/api/simulate", json={"board": "nope", "testbench": "main_tb.v", "files": TB})
+    assert r.status_code == 400
+
+
+async def test_build_job_has_no_wave(client):
+    c = await client()
+    job_id = (await c.post("/api/build", json=BODY)).json()["job_id"]
+    await c.get(f"/api/jobs/{job_id}/events")
+    assert (await c.get(f"/api/jobs/{job_id}/wave")).status_code == 404

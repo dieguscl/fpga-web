@@ -15,7 +15,7 @@ from fpgaweb.config import Settings
 from fpgaweb.flash import flash_plan
 from fpgaweb.jobs import JobManager, QueueFull
 from fpgaweb.ratelimit import RateLimiter
-from fpgaweb.validation import ValidationError, validate_files
+from fpgaweb.validation import ValidationError, validate_files, validate_sim_files
 
 MAX_BODY = 2_000_000
 
@@ -25,6 +25,12 @@ class BuildBody(BaseModel):
     top: str
     files: dict[str, str]
     lint: bool = True
+
+
+class SimBody(BaseModel):
+    board: str
+    testbench: str
+    files: dict[str, str]
 
 
 class BodySizeLimitMiddleware:
@@ -175,31 +181,53 @@ def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
             raise HTTPException(404, "unknown board")
         return {"top": t.top, "files": t.files}
 
-    @app.post("/api/build", status_code=202)
-    async def build(body: BuildBody, request: Request):
-        try:
-            board = registry.get(body.board)
-        except KeyError:
-            raise HTTPException(400, f"unknown board: {body.board}")
-        try:
-            files = validate_files(board, body.top, body.files)
-        except ValidationError as e:
-            raise HTTPException(400, str(e))
+    def admit(request: Request) -> str:
+        """Shared per-IP / capacity / rate-limit gate for builds and simulations."""
         ip = client_ip(request)
         if manager.active_count(ip) > 0:
             raise HTTPException(429, "you already have a build running; wait for it to finish",
                                headers={"Retry-After": "10"})
         # Check queue capacity before spending a rate-limit token: a 503 here
         # must be free to retry, not counted against the caller's rate limit.
-        # submit() below still re-checks and can still raise QueueFull itself
-        # to cover the race against a concurrent submission.
+        # submit() still re-checks and can still raise QueueFull itself to
+        # cover the race against a concurrent submission.
         if manager.queue_full():
             raise HTTPException(503, "build server is busy; try again in a minute")
         if not limiter.allow(ip):
-            return JSONResponse({"detail": "too many builds; slow down"}, status_code=429,
+            raise HTTPException(429, "too many builds; slow down",
                                 headers={"Retry-After": str(limiter.retry_after(ip))})
+        return ip
+
+    def board_or_400(board_id: str) -> Board:
+        try:
+            return registry.get(board_id)
+        except KeyError:
+            raise HTTPException(400, f"unknown board: {board_id}")
+
+    @app.post("/api/build", status_code=202)
+    async def build(body: BuildBody, request: Request):
+        board = board_or_400(body.board)
+        try:
+            files = validate_files(board, body.top, body.files)
+        except ValidationError as e:
+            raise HTTPException(400, str(e))
+        ip = admit(request)
         try:
             job = manager.submit(ip, board, body.top, files, body.lint)
+        except QueueFull:
+            raise HTTPException(503, "build server is busy; try again in a minute")
+        return {"job_id": job.id, "queue_position": job.events[0]["position"]}
+
+    @app.post("/api/simulate", status_code=202)
+    async def simulate(body: SimBody, request: Request):
+        board = board_or_400(body.board)
+        try:
+            files = validate_sim_files(body.testbench, body.files)
+        except ValidationError as e:
+            raise HTTPException(400, str(e))
+        ip = admit(request)
+        try:
+            job = manager.submit(ip, board, "", files, False, kind="sim", testbench=body.testbench)
         except QueueFull:
             raise HTTPException(503, "build server is busy; try again in a minute")
         return {"job_id": job.id, "queue_position": job.events[0]["position"]}
@@ -236,10 +264,20 @@ def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
         return StreamingResponse(gen(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+    @app.get("/api/jobs/{job_id}/wave")
+    async def wave(job_id: str):
+        job = manager.get(job_id)
+        if job is None or job.kind != "sim" or job.bitstream is None:
+            raise HTTPException(404, "no waveform for this job")
+        p = job.bitstream
+        if p.is_symlink() or not p.is_file():
+            raise HTTPException(404, "no waveform for this job")
+        return FileResponse(p, media_type="text/plain; charset=utf-8", filename="wave.vcd")
+
     @app.get("/api/jobs/{job_id}/bitstream")
     async def bitstream(job_id: str):
         job = manager.get(job_id)
-        if job is None or job.bitstream is None:
+        if job is None or job.kind != "build" or job.bitstream is None:
             raise HTTPException(404, "no bitstream for this job")
         p = job.bitstream
         # Controller ruling: sandboxed steps can plant symlinks in the job

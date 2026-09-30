@@ -85,3 +85,29 @@ async def test_syntax_error_reports_file_and_line(manager):
     _, _, events = await build(manager, "icebreaker", files=files, top="main", lint=False)
     assert events[-1] == {"type": "error", "message": "synth failed (exit code 1)"}
     assert any("main.v:2" in e.get("line", "") for e in events)
+
+
+@pytest.mark.parametrize("board_id", ["basys3", "alchitry-cu", "sipeed-tang-nano-9k"])
+async def test_simulation_of_example_testbench(manager, board_id):
+    reg = BoardRegistry(from_env().data_dir)
+    board = reg.get(board_id)
+    t = reg.template(board_id)
+    tb = next(n for n in t.files if n.endswith("_tb.v"))  # boards chosen because their example has one
+    from fpgaweb.validation import validate_sim_files
+    files = validate_sim_files(tb, t.files)
+    job = manager.submit("test", board, "", files, False, kind="sim", testbench=tb)
+    events = [ev async for _, ev in job.stream()]
+    assert events[-1]["type"] == "done", [e for e in events if e["type"] in ("log", "error")][-30:]
+    text = job.bitstream.read_text()
+    assert "$enddefinitions" in text and "$var" in text
+
+
+async def test_simulation_without_dumpvars_gets_waveform(manager):
+    reg = BoardRegistry(from_env().data_dir)
+    files = {"main.v": "module main(input clk, output reg q = 0); always @(posedge clk) q <= ~q; endmodule\n",
+             "main_tb.v": "module main_tb; reg clk = 0; wire q; main u(.clk(clk), .q(q));\n"
+                          "always #5 clk = ~clk; initial begin #100 $display(\"q=%b\", q); $finish; end endmodule\n"}
+    job = manager.submit("test", reg.get("basys3"), "", files, False, kind="sim", testbench="main_tb.v")
+    events = [ev async for _, ev in job.stream()]
+    assert events[-1] == {"type": "done", "kind": "sim", "wave": "wave.vcd"}
+    assert any(e.get("line", "").startswith("q=") for e in events)

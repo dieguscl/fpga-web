@@ -1,5 +1,6 @@
 """Tool command plans per FPGA architecture (flags mirror Apio 1.6 scons plugins)."""
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -115,3 +116,48 @@ def plan_build(board: Board, top: str, files: dict[str, str], settings: Settings
         lint_step, extra = _lint(board, top, srcs, s)
         steps = [lint_step, *steps]
     return BuildPlan(steps=steps, extra_files=extra, output=output)
+
+
+# ── Simulation (Icarus Verilog) ─────────────────────────────────────────────
+DUMP_MODULE = "_fpgaweb_dump"
+_MODULE_DECL = re.compile(r"\bmodule\s+([A-Za-z_][A-Za-z0-9_$]*)")
+
+
+def _strip_comments(src: str) -> str:
+    return re.sub(r"//[^\n]*", " ", re.sub(r"/\*.*?\*/", " ", src, flags=re.S))
+
+
+def testbench_module(text: str) -> str:
+    """Name of the first module declared in a testbench file."""
+    m = _MODULE_DECL.search(_strip_comments(text))
+    if not m or not MODULE_RE.fullmatch(m.group(1)):
+        raise ValueError("the testbench file declares no module")
+    return m.group(1)
+
+
+def plan_sim(board: Board, testbench: str, files: dict[str, str], settings: Settings) -> BuildPlan:
+    """iverilog compile + vvp run. Other testbenches are left out; the board's
+    simulation cell library is passed as a library (-l) so vendor primitives
+    resolve, like `apio sim`. If the testbench never calls $dumpvars, a tiny
+    dump module is added so there is always a waveform."""
+    tb_text = files[testbench]
+    tb = testbench_module(tb_text)
+    srcs = [*_sources(files), testbench]
+    extra: dict[str, str] = {}
+    roots = ["-s", tb]
+    if "$dumpvars" not in _strip_comments(tb_text):
+        extra[f"{DUMP_MODULE}.v"] = (
+            f"module {DUMP_MODULE};\n  initial begin\n    $dumpfile(\"wave.vcd\");\n"
+            f"    $dumpvars(0, {tb});\n  end\nendmodule\n"
+        )
+        roots += ["-s", DUMP_MODULE]
+        srcs.append(f"{DUMP_MODULE}.v")
+    defines = ["-DSIMULATION", "-DAPIO_SIM=1"]
+    if board.arch == "ice40":
+        defines.append("-DNO_ICE40_DEFAULT_ASSIGNMENTS")
+    cells = str(settings.yosys_share / board.arch / "cells_sim.v")
+    steps = [
+        Step("compile", ["iverilog", "-g2012", *defines, "-I.", "-o", "sim.vvp", *roots, "-l", cells, *srcs]),
+        Step("simulate", ["vvp", "-n", "sim.vvp"]),
+    ]
+    return BuildPlan(steps=steps, extra_files=extra, output="")

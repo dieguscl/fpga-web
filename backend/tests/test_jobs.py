@@ -10,6 +10,11 @@ from fpgaweb.sandbox import RunResult
 FILES = {"main.v": "module main; endmodule\n", "p.pcf": ""}
 
 
+VCD = "$timescale 1ns $end\n$scope module tb $end\n$var reg 1 ! clk $end\n$upscope $end\n$enddefinitions $end\n#0\n0!\n#5\n1!\n"
+TB = {"main.v": "module main(input clk); endmodule\n",
+      "main_tb.v": "module main_tb; reg clk; main u(.clk(clk)); initial begin $dumpvars(0, main_tb); #10 $finish; end endmodule\n"}
+
+
 class FakeRunner:
     """Pretends to run tools: writes the expected output of each step."""
 
@@ -29,6 +34,8 @@ class FakeRunner:
             (cwd / "hw.bin").write_bytes(b"\x7e\xaa\x99\x7e")
         if argv[0].startswith("nextpnr"):
             (cwd / "report.json").write_text('{"utilization": {"LC": {"used": 5, "available": 10}}}')
+        if argv[0] == "vvp":
+            (cwd / "dump.vcd").write_text(VCD)
         return RunResult(0)
 
 
@@ -387,3 +394,37 @@ async def test_run_step_value_error_fails_job_with_step_name(make, registry):
     events = await drain(job)
     assert events[-1] == {"type": "error", "message": "pack failed"}
     assert job.state is JobState.FAILED and job.bitstream is None
+
+
+async def test_simulation_job(make, registry):
+    runner = FakeRunner()
+    m = await make(runner)
+    job = m.submit("ip", registry.get("basys3"), "", dict(TB), False, kind="sim", testbench="main_tb.v")
+    events = await drain(job)
+    assert [e["name"] for e in events if e["type"] == "step"] == ["compile", "simulate"]
+    assert events[-1] == {"type": "done", "kind": "sim", "wave": "dump.vcd"}
+    assert job.bitstream.read_text() == VCD
+    assert runner.calls[0][0] == "iverilog" and runner.calls[1] == ["vvp", "-n", "sim.vvp"]
+    assert sorted(p.name for p in job.dir.iterdir()) == ["dump.vcd"]
+
+
+async def test_simulation_without_waveform_fails(make, registry):
+    class NoWave(FakeRunner):
+        async def __call__(self, argv, cwd, settings, on_line, stdout_file=None):
+            return RunResult(0)
+    m = await make(NoWave())
+    job = m.submit("ip", registry.get("basys3"), "", dict(TB), False, kind="sim", testbench="main_tb.v")
+    assert (await drain(job))[-1] == {"type": "error", "message": "the simulation wrote no waveform (.vcd)"}
+
+
+async def test_simulation_waveform_size_cap(make, registry):
+    m = await make(FakeRunner(), max_vcd_bytes=10)
+    job = m.submit("ip", registry.get("basys3"), "", dict(TB), False, kind="sim", testbench="main_tb.v")
+    last = (await drain(job))[-1]
+    assert last["type"] == "error" and "larger than" in last["message"]
+
+
+async def test_simulation_timeout_message(make, registry):
+    m = await make(FakeRunner(fail_step="vvp", killed="timeout"))
+    job = m.submit("ip", registry.get("basys3"), "", dict(TB), False, kind="sim", testbench="main_tb.v")
+    assert (await drain(job))[-1]["message"].startswith("simulate exceeded the")

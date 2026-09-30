@@ -35,6 +35,7 @@ class Settings:
     rate_n: int = 10
     rate_window_s: int = 600
     sse_ping_s: int = 15
+    max_vcd_bytes: int = 20 * 1024**2
 
 
 def _coerce(name: str, raw: str):

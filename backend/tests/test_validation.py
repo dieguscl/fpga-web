@@ -86,3 +86,15 @@ def test_bad_top_module(basys3, top):
 def test_is_testbench():
     assert is_testbench("cpu_tb.v") and is_testbench("x_tb.sv")
     assert not is_testbench("tb_helper.v")
+
+
+def test_validate_sim_files():
+    from fpgaweb.validation import validate_sim_files
+    files = {"main.v": "module main; endmodule", "main_tb.v": "module main_tb; endmodule"}
+    assert validate_sim_files("main_tb.v", files) == files  # no constraint file needed
+    with pytest.raises(ValidationError, match="testbench"):
+        validate_sim_files("main.v", files)
+    with pytest.raises(ValidationError, match="testbench"):
+        validate_sim_files("missing_tb.v", files)
+    with pytest.raises(ValidationError, match="file name"):
+        validate_sim_files("main_tb.v", {**files, "../x.v": ""})

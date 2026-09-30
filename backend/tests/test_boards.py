@@ -25,7 +25,8 @@ def test_unknown_board_raises(registry):
 def test_template_from_apio_example(registry):
     t = registry.template("sipeed-tang-nano-9k")
     assert t.top == "blinky"
-    assert set(t.files) == {"blinky.v", "blinky.cst"}  # tb, gtkw, apio.ini, info, apio_testing.vh dropped
+    # the testbench (and the apio macros it includes) is kept for simulation; gtkw, apio.ini, info dropped
+    assert set(t.files) == {"blinky.v", "blinky.cst", "blinky_tb.v", "apio_testing.vh"}
 
 
 def test_template_fallback_for_board_without_example(registry):

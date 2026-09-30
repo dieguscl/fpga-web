@@ -15,7 +15,7 @@ from typing import AsyncIterator, Awaitable, Callable
 from fpgaweb.boards import Board
 from fpgaweb.chipdb import ChipdbError
 from fpgaweb.config import Settings
-from fpgaweb.recipes import REPORT, plan_build
+from fpgaweb.recipes import REPORT, plan_build, plan_sim
 from fpgaweb.sandbox import RunResult
 from fpgaweb.summary import read_summary
 
@@ -103,8 +103,10 @@ class Job:
     dir: Path
     state: JobState = JobState.QUEUED
     events: list[dict] = field(default_factory=list)
-    bitstream: Path | None = None
+    bitstream: Path | None = None  # build output (bitstream) or, for simulations, the VCD waveform
     finished_at: float | None = None
+    kind: str = "build"  # "build" | "sim"
+    testbench: str | None = None
     _changed: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
 
     @property
@@ -144,11 +146,12 @@ class _LogSink:
 
 class JobManager:
     def __init__(self, settings: Settings, *, run_step: RunStep, chipdb, plan=plan_build,
-                 clock: Callable[[], float] = time.monotonic):
+                 plan_simulation=plan_sim, clock: Callable[[], float] = time.monotonic):
         self._s = settings
         self._run = run_step
         self._chipdb = chipdb
         self._plan = plan
+        self._plan_sim = plan_simulation
         self._clock = clock
         self._jobs: dict[str, Job] = {}
         self._pending: deque[Job] = deque()
@@ -166,12 +169,13 @@ class JobManager:
         await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks = []
 
-    def submit(self, ip: str, board: Board, top: str, files: dict[str, str], lint: bool) -> Job:
+    def submit(self, ip: str, board: Board, top: str, files: dict[str, str], lint: bool,
+               *, kind: str = "build", testbench: str | None = None) -> Job:
         if len(self._pending) >= self._s.queue_max:
             raise QueueFull()
         job_id = secrets.token_urlsafe(12)
         job = Job(id=job_id, ip=ip, board=board, top=top, files=files, lint=lint,
-                  dir=self._s.work_dir / job_id)
+                  dir=self._s.work_dir / job_id, kind=kind, testbench=testbench)
         self._jobs[job_id] = job
         self._pending.append(job)
         job.emit({"type": "queued", "position": len(self._pending)})
@@ -226,7 +230,7 @@ class JobManager:
                     self._fail(job, "internal build error")
             finally:
                 job.finished_at = self._clock()
-                log.info("build ip=%s board=%s state=%s duration=%.1fs",
+                log.info("%s ip=%s board=%s state=%s duration=%.1fs", job.kind,
                          job.ip, job.board.id, job.state.value, job.finished_at - started_at)
 
     def _fail(self, job: Job, message: str) -> None:
@@ -242,6 +246,9 @@ class JobManager:
         job.dir.mkdir(parents=True, exist_ok=True)
         for name, text in job.files.items():
             (job.dir / name).write_text(text, encoding="utf-8")
+
+        if job.kind == "sim":
+            return await self._execute_sim(job)
 
         chipdb_path = None
         if job.board.arch == "xilinx":
@@ -260,20 +267,8 @@ class JobManager:
         for name, text in plan.extra_files.items():
             (job.dir / name).write_text(text, encoding="utf-8")
 
-        sink = _LogSink(job, self._s)
-        for step in plan.steps:
-            job.emit({"type": "step", "name": step.name})
-            try:
-                res = await self._run(step.argv, job.dir, self._s, sink, step.stdout_file)
-            except (OSError, ValueError):
-                return self._fail(job, f"{step.name} failed")
-            if res.exit_code != 0:
-                if res.killed:
-                    reason = _KILL_TEXT[res.killed].format(wall=self._s.wall_s)
-                    return self._fail(job, f"{step.name} {reason}")
-                return self._fail(job, f"{step.name} failed (exit code {res.exit_code})")
-            if _dir_size(job.dir) > self._s.max_job_dir_bytes:
-                return self._fail(job, f"{step.name} exceeded the disk limit")
+        if not await self._run_steps(job, plan.steps):
+            return
 
         out = job.dir / plan.output
         if out.is_symlink() or not out.is_file() or out.stat().st_size == 0:
@@ -297,3 +292,53 @@ class JobManager:
         job.bitstream = out
         job.state = JobState.DONE
         job.emit({"type": "done", "summary": summary, "bitstream": plan.output})
+
+    async def _run_steps(self, job: Job, steps) -> bool:
+        """Run plan steps in the sandbox; on failure emit the error and return False."""
+        sink = _LogSink(job, self._s)
+        for step in steps:
+            job.emit({"type": "step", "name": step.name})
+            try:
+                res = await self._run(step.argv, job.dir, self._s, sink, step.stdout_file)
+            except (OSError, ValueError):
+                self._fail(job, f"{step.name} failed")
+                return False
+            if res.exit_code != 0:
+                if res.killed:
+                    reason = _KILL_TEXT[res.killed].format(wall=self._s.wall_s)
+                    self._fail(job, f"{step.name} {reason}")
+                else:
+                    self._fail(job, f"{step.name} failed (exit code {res.exit_code})")
+                return False
+            if _dir_size(job.dir) > self._s.max_job_dir_bytes:
+                self._fail(job, f"{step.name} exceeded the disk limit")
+                return False
+        return True
+
+    async def _execute_sim(self, job: Job) -> None:
+        try:
+            plan = self._plan_sim(job.board, job.testbench, job.files, self._s)
+        except ValueError as e:
+            return self._fail(job, str(e))
+        job.files = {}
+        for name, text in plan.extra_files.items():
+            (job.dir / name).write_text(text, encoding="utf-8")
+        if not await self._run_steps(job, plan.steps):
+            return
+        # The testbench chooses the file name ($dumpfile); take the largest
+        # regular (non-symlink) .vcd the simulation wrote.
+        waves = []
+        with os.scandir(job.dir) as it:
+            for e in it:
+                if e.name.endswith(".vcd") and not e.is_symlink() and e.is_file(follow_symlinks=False):
+                    waves.append((e.stat(follow_symlinks=False).st_size, e.name))
+        if not waves:
+            return self._fail(job, "the simulation wrote no waveform (.vcd)")
+        size, name = max(waves)
+        if size > self._s.max_vcd_bytes:
+            return self._fail(job, f"the waveform is larger than {self._s.max_vcd_bytes // 1024**2} MB; "
+                                   "dump fewer signals ($dumpvars depth) or simulate a shorter time")
+        _keep_only(job.dir, name)
+        job.bitstream = job.dir / name
+        job.state = JobState.DONE
+        job.emit({"type": "done", "kind": "sim", "wave": name})

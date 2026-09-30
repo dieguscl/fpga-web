@@ -91,8 +91,6 @@ class BoardRegistry:
                 for p in sorted(example.iterdir())
                 if p.is_file()
                 and p.suffix in TEMPLATE_EXTS
-                and not p.stem.endswith("_tb")
-                and not p.name.startswith("apio_testing")
             }
             return Template(top=top, files=files)
         c = _COMMENT[board.constraint_ext]
