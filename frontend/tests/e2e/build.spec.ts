@@ -239,3 +239,17 @@ test('Vim mode toggle in settings', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(page.locator('.cm-vim-panel')).toHaveCount(0);
 });
+
+test('typographic quotes in a testbench get a clear, linked error', async ({ page }) => {
+  await page.goto('/');
+  await page.selectOption('#board', 'basys3');
+  page.once('dialog', (d) => d.accept('quotes'));
+  await page.click('#new-project');
+  await page.locator('#file-list li', { hasText: 'blinky_tb.v' }).click();
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type('\nmodule q_tb; reg [1:0] s; initial s = 2’b01; endmodule\n'); // typed, not pasted: no filter
+  await page.click('#simulate');
+  await expect(page.locator('#status')).toContainText('U+2019');
+  await expect(page.locator('#log a.loc')).toContainText('blinky_tb.v:');
+});

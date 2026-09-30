@@ -453,6 +453,7 @@ async function build() {
     if (gen !== buildGen) return;
     const msg = e instanceof ApiError ? e.message : String(e);
     setStatus('status.buildFailed', { msg }, 'err');
+    if (e instanceof ApiError) appendLog(msg); // file:line in validation errors becomes a link
     enableRun();
   }
 }
@@ -531,6 +532,7 @@ async function simulate() {
   } catch (e) {
     if (gen !== buildGen) return;
     setStatus('status.simFailed', { msg: e instanceof ApiError ? e.message : String(e) }, 'err');
+    if (e instanceof ApiError) appendLog(e.message);
     done();
   }
 }

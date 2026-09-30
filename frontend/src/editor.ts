@@ -39,6 +39,12 @@ const hexaflexHighlight = HighlightStyle.define([
 
 const VIM_KEY = 'fpgaweb.vim';
 
+/** Code pasted from PDFs/Word/slides often has typographic quotes and dashes the tools reject. */
+export function plainQuotes(text: string): string {
+  return text.replace(/[\u2018\u2019\u201a\u2032\u00b4]/g, "'").replace(/[\u201c\u201d\u201e\u2033]/g, '"')
+    .replace(/[\u2013\u2014\u2212]/g, '-').replace(/\u00a0/g, ' ').replace(/\u200b/g, '');
+}
+
 export function vimEnabled(): boolean {
   try {
     return localStorage.getItem(VIM_KEY) === '1';
@@ -60,6 +66,7 @@ export class Editor {
       extensions: [
         this.vimMode.of(this.vim ? vim({ status: true }) : []), // must precede the other keymaps
         basicSetup,
+        EditorView.clipboardInputFilter.of(plainQuotes),
         keymap.of([indentWithTab]), // Tab/Shift-Tab indent the selected lines (Esc, Tab leaves the editor)
         StreamLanguage.define(verilog),
         hexaflexTheme,
