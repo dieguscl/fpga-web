@@ -161,3 +161,33 @@ def plan_sim(board: Board, testbench: str, files: dict[str, str], settings: Sett
         Step("simulate", ["vvp", "-n", "sim.vvp"]),
     ]
     return BuildPlan(steps=steps, extra_files=extra, output="")
+
+
+# ── Virtual board: gate-level netlist for the in-browser simulator ──────────
+NETLIST = "gate.json"
+SPEEDUPS = (1, 10, 100, 1000)
+_SPEEDUP_SRC = Path(__file__).with_name("speedup.py")
+
+
+def plan_netlist(board: Board, top: str, files: dict[str, str], settings: Settings, speedup: int = 1) -> BuildPlan:
+    """RTL → word-level JSON (optionally scale big comparison constants) →
+    simple gates + positive/negative-edge DFFs (async resets made synchronous,
+    enables folded into muxes, undefined bits zeroed)."""
+    if not MODULE_RE.fullmatch(top):
+        raise ValueError("invalid top module")
+    if speedup not in SPEEDUPS:
+        raise ValueError("invalid speed-up factor")
+    srcs = _sources(files)
+    steps = [
+        Step("elaborate", ["yosys", "-q", "-DSYNTHESIZE", "-p",
+                           f"hierarchy -check -top {top}; proc; flatten; opt -full; memory; opt -full; write_json word.json",
+                           *srcs]),
+    ]
+    extra: dict[str, str] = {}
+    if speedup > 1:
+        extra["speedup.py"] = _SPEEDUP_SRC.read_text(encoding="utf-8")
+        steps.append(Step("speed-up", ["python3", "speedup.py", "word.json", "word.json", str(speedup)]))
+    steps.append(Step("gates", ["yosys", "-q", "-p",
+                                "read_json word.json; techmap; opt -fast; async2sync; dffunmap; setundef -zero; "
+                                f"opt_clean -purge; write_json {NETLIST}"]))
+    return BuildPlan(steps=steps, extra_files=extra, output=NETLIST)

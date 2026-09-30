@@ -15,7 +15,7 @@ from typing import AsyncIterator, Awaitable, Callable
 from fpgaweb.boards import Board
 from fpgaweb.chipdb import ChipdbError
 from fpgaweb.config import Settings
-from fpgaweb.recipes import REPORT, plan_build, plan_sim
+from fpgaweb.recipes import REPORT, plan_build, plan_netlist, plan_sim
 from fpgaweb.sandbox import RunResult
 from fpgaweb.summary import read_summary
 
@@ -105,8 +105,9 @@ class Job:
     events: list[dict] = field(default_factory=list)
     bitstream: Path | None = None  # build output (bitstream) or, for simulations, the VCD waveform
     finished_at: float | None = None
-    kind: str = "build"  # "build" | "sim"
+    kind: str = "build"  # "build" | "sim" | "netlist"
     testbench: str | None = None
+    speedup: int = 1
     _changed: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
 
     @property
@@ -170,12 +171,12 @@ class JobManager:
         self._tasks = []
 
     def submit(self, ip: str, board: Board, top: str, files: dict[str, str], lint: bool,
-               *, kind: str = "build", testbench: str | None = None) -> Job:
+               *, kind: str = "build", testbench: str | None = None, speedup: int = 1) -> Job:
         if len(self._pending) >= self._s.queue_max:
             raise QueueFull()
         job_id = secrets.token_urlsafe(12)
         job = Job(id=job_id, ip=ip, board=board, top=top, files=files, lint=lint,
-                  dir=self._s.work_dir / job_id, kind=kind, testbench=testbench)
+                  dir=self._s.work_dir / job_id, kind=kind, testbench=testbench, speedup=speedup)
         self._jobs[job_id] = job
         self._pending.append(job)
         job.emit({"type": "queued", "position": len(self._pending)})
@@ -249,6 +250,8 @@ class JobManager:
 
         if job.kind == "sim":
             return await self._execute_sim(job)
+        if job.kind == "netlist":
+            return await self._execute_netlist(job)
 
         chipdb_path = None
         if job.board.arch == "xilinx":
@@ -342,3 +345,23 @@ class JobManager:
         job.bitstream = job.dir / name
         job.state = JobState.DONE
         job.emit({"type": "done", "kind": "sim", "wave": name})
+
+    async def _execute_netlist(self, job: Job) -> None:
+        try:
+            plan = plan_netlist(job.board, job.top, job.files, self._s, job.speedup)
+        except ValueError as e:
+            return self._fail(job, str(e))
+        job.files = {}
+        for name, text in plan.extra_files.items():
+            (job.dir / name).write_text(text, encoding="utf-8")
+        if not await self._run_steps(job, plan.steps):
+            return
+        out = job.dir / plan.output
+        if out.is_symlink() or not out.is_file() or out.stat().st_size == 0:
+            return self._fail(job, "no netlist was produced")
+        if out.stat().st_size > self._s.max_vcd_bytes:
+            return self._fail(job, "the design is too large for the virtual board")
+        _keep_only(job.dir, out.name)
+        job.bitstream = out
+        job.state = JobState.DONE
+        job.emit({"type": "done", "kind": "netlist", "netlist": out.name})

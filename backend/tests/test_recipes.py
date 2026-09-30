@@ -153,3 +153,18 @@ def test_plan_sim_rejects_testbench_without_module(registry, settings):
     from fpgaweb.recipes import plan_sim
     with pytest.raises(ValueError, match="no module"):
         plan_sim(registry.get("basys3"), "x_tb.v", {"x_tb.v": "// nothing"}, settings)
+
+
+def test_plan_netlist(registry, settings):
+    from fpgaweb.recipes import plan_netlist
+    files = {"main.v": "module main; endmodule", "main_tb.v": "", "p.xdc": ""}
+    p = plan_netlist(registry.get("basys3"), "main", files, settings)
+    assert [s.name for s in p.steps] == ["elaborate", "gates"] and p.output == "gate.json"
+    assert "hierarchy -check -top main" in p.steps[0].argv[4] and p.steps[0].argv[-1] == "main.v"
+    assert "dffunmap" in p.steps[1].argv[3] and "write_json gate.json" in p.steps[1].argv[3]
+    fast = plan_netlist(registry.get("basys3"), "main", files, settings, 1000)
+    assert [s.name for s in fast.steps] == ["elaborate", "speed-up", "gates"]
+    assert fast.steps[1].argv == ["python3", "speedup.py", "word.json", "word.json", "1000"]
+    assert "def scale_netlist" in fast.extra_files["speedup.py"]
+    with pytest.raises(ValueError):
+        plan_netlist(registry.get("basys3"), "main", files, settings, 7)

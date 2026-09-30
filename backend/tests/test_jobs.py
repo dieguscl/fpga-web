@@ -36,6 +36,8 @@ class FakeRunner:
             (cwd / "report.json").write_text('{"utilization": {"LC": {"used": 5, "available": 10}}}')
         if argv[0] == "vvp":
             (cwd / "dump.vcd").write_text(VCD)
+        if argv[0] == "yosys" and "write_json gate.json" in " ".join(argv):
+            (cwd / "gate.json").write_text('{"modules": {}}')
         return RunResult(0)
 
 
@@ -428,3 +430,12 @@ async def test_simulation_timeout_message(make, registry):
     m = await make(FakeRunner(fail_step="vvp", killed="timeout"))
     job = m.submit("ip", registry.get("basys3"), "", dict(TB), False, kind="sim", testbench="main_tb.v")
     assert (await drain(job))[-1]["message"].startswith("simulate exceeded the")
+
+
+async def test_netlist_job(make, registry):
+    m = await make(FakeRunner())
+    job = m.submit("ip", registry.get("basys3"), "main", dict(TB), False, kind="netlist", speedup=100)
+    events = await drain(job)
+    assert [e["name"] for e in events if e["type"] == "step"] == ["elaborate", "speed-up", "gates"]
+    assert events[-1] == {"type": "done", "kind": "netlist", "netlist": "gate.json"}
+    assert job.bitstream.read_text() == '{"modules": {}}'

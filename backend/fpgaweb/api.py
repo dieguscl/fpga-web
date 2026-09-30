@@ -15,7 +15,7 @@ from fpgaweb.config import Settings
 from fpgaweb.flash import flash_plan
 from fpgaweb.jobs import JobManager, QueueFull
 from fpgaweb.ratelimit import RateLimiter
-from fpgaweb.validation import ValidationError, validate_files, validate_sim_files
+from fpgaweb.validation import ValidationError, validate_design_files, validate_files, validate_sim_files
 
 MAX_BODY = 2_000_000
 
@@ -25,6 +25,13 @@ class BuildBody(BaseModel):
     top: str
     files: dict[str, str]
     lint: bool = True
+
+
+class NetlistBody(BaseModel):
+    board: str
+    top: str
+    files: dict[str, str]
+    speedup: int = 1
 
 
 class SimBody(BaseModel):
@@ -218,6 +225,22 @@ def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
             raise HTTPException(503, "build server is busy; try again in a minute")
         return {"job_id": job.id, "queue_position": job.events[0]["position"]}
 
+    @app.post("/api/netlist", status_code=202)
+    async def netlist(body: NetlistBody, request: Request):
+        board = board_or_400(body.board)
+        if body.speedup not in (1, 10, 100, 1000):
+            raise HTTPException(400, "speedup must be 1, 10, 100 or 1000")
+        try:
+            files = validate_design_files(body.top, body.files)
+        except ValidationError as e:
+            raise HTTPException(400, str(e))
+        ip = admit(request)
+        try:
+            job = manager.submit(ip, board, body.top, files, False, kind="netlist", speedup=body.speedup)
+        except QueueFull:
+            raise HTTPException(503, "build server is busy; try again in a minute")
+        return {"job_id": job.id, "queue_position": job.events[0]["position"]}
+
     @app.post("/api/simulate", status_code=202)
     async def simulate(body: SimBody, request: Request):
         board = board_or_400(body.board)
@@ -263,6 +286,16 @@ def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
 
         return StreamingResponse(gen(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @app.get("/api/jobs/{job_id}/netlist")
+    async def netlist_file(job_id: str):
+        job = manager.get(job_id)
+        if job is None or job.kind != "netlist" or job.bitstream is None:
+            raise HTTPException(404, "no netlist for this job")
+        p = job.bitstream
+        if p.is_symlink() or not p.is_file():
+            raise HTTPException(404, "no netlist for this job")
+        return FileResponse(p, media_type="application/json")
 
     @app.get("/api/jobs/{job_id}/wave")
     async def wave(job_id: str):

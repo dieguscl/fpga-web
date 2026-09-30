@@ -88,3 +88,13 @@ def validate_sim_files(testbench: str, files: dict[str, str]) -> dict[str, str]:
     if testbench not in out or not is_testbench(testbench):
         raise ValidationError("choose a testbench file (a .v/.sv file whose name ends in _tb)")
     return out
+
+
+def validate_design_files(top: str, files: dict[str, str]) -> dict[str, str]:
+    """Virtual board: design sources and a top module; constraints optional."""
+    if not MODULE_RE.fullmatch(top or ""):
+        raise ValidationError("top module must be a valid Verilog identifier")
+    out = _check_files(files)
+    if not any(_ext(n) in DESIGN_EXTS and not is_testbench(n) for n in out):
+        raise ValidationError("project has no Verilog design source (.v or .sv)")
+    return out

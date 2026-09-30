@@ -382,3 +382,17 @@ async def test_build_job_has_no_wave(client):
     job_id = (await c.post("/api/build", json=BODY)).json()["job_id"]
     await c.get(f"/api/jobs/{job_id}/events")
     assert (await c.get(f"/api/jobs/{job_id}/wave")).status_code == 404
+
+
+async def test_netlist_endpoint(client):
+    from tests.test_jobs import TB
+    c = await client()
+    r = await c.post("/api/netlist", json={"board": "basys3", "top": "main", "files": TB, "speedup": 10})
+    assert r.status_code == 202
+    job_id = r.json()["job_id"]
+    events = sse_events((await c.get(f"/api/jobs/{job_id}/events")).text)
+    assert events[-1][1] == {"type": "done", "kind": "netlist", "netlist": "gate.json"}
+    r = await c.get(f"/api/jobs/{job_id}/netlist")
+    assert r.status_code == 200 and r.json() == {"modules": {}}
+    bad = await c.post("/api/netlist", json={"board": "basys3", "top": "main", "files": TB, "speedup": 3})
+    assert bad.status_code == 400

@@ -111,3 +111,20 @@ async def test_simulation_without_dumpvars_gets_waveform(manager):
     events = [ev async for _, ev in job.stream()]
     assert events[-1] == {"type": "done", "kind": "sim", "wave": "wave.vcd"}
     assert any(e.get("line", "").startswith("q=") for e in events)
+
+
+async def test_netlist_for_virtual_board_with_speedup(manager):
+    import json
+    reg = BoardRegistry(from_env().data_dir)
+    files = {"main.v": "module main(input clk, output reg led = 0); reg [25:0] d = 0;\n"
+                       "always @(posedge clk) if (d == 26'd49_999_999) begin d <= 0; led <= ~led; end else d <= d + 1;\n"
+                       "endmodule\n"}
+    job = manager.submit("test", reg.get("basys3"), "main", files, False, kind="netlist", speedup=1000)
+    events = [ev async for _, ev in job.stream()]
+    assert events[-1]["type"] == "done", [e for e in events if e["type"] in ("log", "error")][-20:]
+    assert any("scaled 1 constant" in e.get("line", "") for e in events)
+    net = json.loads(job.bitstream.read_text())
+    cells = net["modules"]["main"]["cells"].values()
+    types = {c["type"] for c in cells}
+    assert "$_DFF_P_" in types and types <= {"$_DFF_P_", "$_DFF_N_", "$_NOT_", "$_AND_", "$_OR_", "$_XOR_", "$_MUX_",
+                                             "$_NAND_", "$_NOR_", "$_XNOR_", "$_ANDNOT_", "$_ORNOT_", "$_BUF_"}
