@@ -1,7 +1,8 @@
 import { EditorView, basicSetup } from 'codemirror';
 import { indentWithTab } from '@codemirror/commands';
 import { keymap } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
+import { vim } from '@replit/codemirror-vim';
 import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { verilog } from '@codemirror/legacy-modes/mode/verilog';
 import { tags as t } from '@lezer/highlight';
@@ -36,8 +37,20 @@ const hexaflexHighlight = HighlightStyle.define([
   { tag: [t.variableName, t.propertyName], color: 'var(--hf-text)' },
 ]);
 
+const VIM_KEY = 'fpgaweb.vim';
+
+export function vimEnabled(): boolean {
+  try {
+    return localStorage.getItem(VIM_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export class Editor {
   private view: EditorView;
+  private vimMode = new Compartment();
+  private vim = vimEnabled();
   constructor(parent: HTMLElement, private onChange: (text: string) => void) {
     this.view = new EditorView({ parent, state: this.state('', false) });
   }
@@ -45,6 +58,7 @@ export class Editor {
     return EditorState.create({
       doc: text,
       extensions: [
+        this.vimMode.of(this.vim ? vim({ status: true }) : []), // must precede the other keymaps
         basicSetup,
         keymap.of([indentWithTab]), // Tab/Shift-Tab indent the selected lines (Esc, Tab leaves the editor)
         StreamLanguage.define(verilog),
@@ -62,6 +76,16 @@ export class Editor {
   // file), where there is nothing meaningful to type into.
   setDoc(_name: string, text: string, readOnly = false): void {
     this.view.setState(this.state(text, readOnly));
+  }
+  /** Toggle Vim keybindings (remembered in this browser). */
+  setVim(on: boolean): void {
+    this.vim = on;
+    try {
+      localStorage.setItem(VIM_KEY, on ? '1' : '0');
+    } catch {
+      /* private mode: just not remembered */
+    }
+    this.view.dispatch({ effects: this.vimMode.reconfigure(on ? vim({ status: true }) : []) });
   }
   gotoLine(line: number): void {
     const doc = this.view.state.doc;

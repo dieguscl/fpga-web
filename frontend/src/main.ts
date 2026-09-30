@@ -7,7 +7,7 @@ import '@fontsource/inter/700.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/700.css';
 import { ApiError, fetchBitstream, fetchNetlist, fetchWave, submitNetlist, submitSim, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent } from './api';
-import { Editor } from './editor';
+import { Editor, vimEnabled } from './editor';
 import { parseLocations } from './errors';
 import { applyTheme, getTheme, onThemeChange, setTheme, type ThemeChoice } from './theme';
 import { decorateIcons } from './icons';
@@ -645,6 +645,9 @@ async function init() {
 
 function initSettings() {
   applyTheme();
+  const vimBox = $<HTMLInputElement>('vim-mode');
+  vimBox.checked = vimEnabled();
+  vimBox.onchange = () => editor.setVim(vimBox.checked);
   const marks = () => document.querySelectorAll<HTMLButtonElement>('[data-theme-choice]').forEach((b) => {
     b.classList.toggle('active', b.dataset.themeChoice === getTheme());
     b.setAttribute('aria-checked', String(b.dataset.themeChoice === getTheme()));

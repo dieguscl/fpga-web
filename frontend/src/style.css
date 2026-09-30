@@ -592,3 +592,7 @@ button[data-icon] { display: inline-flex; align-items: center; justify-content: 
 .about-more[open] summary::before { transform: rotate(90deg); }
 .about-more summary:hover { color: var(--hf-text); }
 .about-more .about-stack { margin-top: 10px; }
+/* Vim mode: status line (mode / pending keys / : commands) and block cursor */
+.cm-vim-panel { padding: 2px 8px; font-family: var(--font-mono); font-size: 0.75rem; background: var(--hf-surface-container-high); color: var(--hf-text-secondary); }
+.cm-vim-panel input, .cm-vim-panel input:focus { height: auto; padding: 0; border: 0; outline: none; background: transparent; font: inherit; color: var(--hf-text); }
+.cm-fat-cursor { background: color-mix(in srgb, var(--hf-primary) 55%, transparent) !important; color: inherit !important; }

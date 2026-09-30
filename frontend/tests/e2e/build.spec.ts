@@ -215,3 +215,27 @@ test('Tab indents the selected lines, Shift+Tab dedents them', async ({ page }) 
   await page.keyboard.press('Shift+Tab');
   await expect.poll(lines).toEqual(['a', 'b', 'c']);
 });
+
+test('Vim mode toggle in settings', async ({ page }) => {
+  await page.goto('/');
+  page.once('dialog', (d) => d.accept('vim.v'));
+  await page.click('#add-file');
+  await page.click('#settings');
+  await page.check('#vim-mode');
+  await page.keyboard.press('Escape');
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Delete');
+  await page.keyboard.press('Escape');
+  await page.keyboard.type('ihello world');
+  await page.keyboard.press('Escape');
+  await page.keyboard.type('0dw');
+  await expect(page.locator('.cm-content')).toHaveText('world');
+  await expect(page.locator('.cm-vim-panel')).toBeVisible();
+  await page.reload();
+  await page.click('#settings');
+  await expect(page.locator('#vim-mode')).toBeChecked(); // remembered
+  await page.uncheck('#vim-mode');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.cm-vim-panel')).toHaveCount(0);
+});
