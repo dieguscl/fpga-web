@@ -154,3 +154,42 @@ test('draw a circuit, get Verilog, run it live', async ({ page }) => {
   await page.locator('.ce-comp.ce-t-in').nth(1).click();
   await expect(page.locator('.ce-comp.ce-t-out.ce-on')).toHaveCount(1);
 });
+
+test('virtual Basys 3: switches drive LEDs and the 7-segment display', async ({ page }) => {
+  const { strToU8, zipSync } = await import('fflate');
+  const sw = ['V17', 'V16', 'W16', 'W17', 'W15', 'V15', 'W14', 'W13', 'V2', 'T3', 'T2', 'R3', 'W2', 'U1', 'T1', 'R2'];
+  const led = ['U16', 'E19', 'U19', 'V19', 'W18', 'U15', 'U14', 'V14', 'V13', 'V3', 'W3', 'U3', 'P3', 'N3', 'P1', 'L1'];
+  const line = (pin: string, port: string) => `set_property -dict { PACKAGE_PIN ${pin} IOSTANDARD LVCMOS33 } [get_ports { ${port} }]\n`;
+  let xdc = line('W5', 'clk') + line('U18', 'btnC');
+  sw.forEach((p, i) => (xdc += line(p, `sw[${i}]`)));
+  led.forEach((p, i) => (xdc += line(p, `led[${i}]`)));
+  ['W7', 'W6', 'U8', 'V8', 'U5', 'V5', 'U7'].forEach((p, i) => (xdc += line(p, `seg[${i}]`)));
+  ['U2', 'U4', 'V4', 'W4'].forEach((p, i) => (xdc += line(p, `an[${i}]`)));
+  const v = `module top(input clk, input [15:0] sw, input btnC, output [15:0] led, output reg [6:0] seg, output reg [3:0] an);
+    assign led = btnC ? ~sw : sw;
+    reg [15:0] refresh = 0; always @(posedge clk) refresh <= refresh + 1;
+    reg [3:0] nib;
+    always @* begin
+      an = 4'b1111; an[refresh[15:14]] = 1'b0; nib = sw[refresh[15:14]*4 +: 4];
+      case (nib) 4'd0: seg = 7'b1000000; 4'd1: seg = 7'b1111001; default: seg = 7'b0111111; endcase
+    end
+  endmodule\n`;
+  const zip = zipSync({ 'project.json': strToU8(JSON.stringify({ name: 'vb', board: 'basys3', top: 'top' })), 'top.v': strToU8(v), 'basys3.xdc': strToU8(xdc) });
+  await page.goto('/');
+  await page.setInputFiles('#import-file', { name: 'vb.zip', mimeType: 'application/zip', buffer: Buffer.from(zip) });
+  await expect(page.locator('#file-list')).toContainText('top.v');
+  await page.click('#tab-board');
+  await page.click('button[data-i18n="vb.load"]');
+  await expect(page.locator('.vb-status')).toContainText('MHz', { timeout: 60_000 });
+  await expect(page.locator('.vb-led.vb-lit')).toHaveCount(0);
+  await page.locator('.vb-sw[data-signal="sw[0]"]').click();
+  await page.locator('.vb-sw[data-signal="sw[5]"]').click();
+  await expect(page.locator('.vb-led.vb-lit')).toHaveCount(2);
+  await expect(page.locator('.vb-seg.vb-lit')).not.toHaveCount(0);
+  const b = (await page.locator('.vb-btn[data-signal="btnC"]').boundingBox())!;
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.down();
+  await expect(page.locator('.vb-led.vb-lit')).toHaveCount(14);
+  await page.mouse.up();
+  await expect(page.locator('.vb-led.vb-lit')).toHaveCount(2);
+});

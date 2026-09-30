@@ -21,6 +21,7 @@ export type BuildEvent =
   | { type: 'log'; line: string }
   | { type: 'done'; kind?: 'build'; bitstream: string; summary: { utilization: Record<string, { used: number; available: number }>; fmax: Record<string, number> } }
   | { type: 'done'; kind: 'sim'; wave: string }
+  | { type: 'done'; kind: 'netlist'; netlist: string }
   | { type: 'error'; message: string };
 
 export class ApiError extends Error {
@@ -59,6 +60,20 @@ export function submitSim(req: { board: string; testbench: string; files: Record
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(req),
   }).then((r) => json<{ job_id: string; queue_position: number }>(r));
+}
+
+export function submitNetlist(req: { board: string; top: string; files: Record<string, string>; speedup: number }) {
+  return fetch('/api/netlist', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  }).then((r) => json<{ job_id: string; queue_position: number }>(r));
+}
+
+export async function fetchNetlist(jobId: string): Promise<unknown> {
+  const r = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/netlist`);
+  if (!r.ok) throw new ApiError(r.status, 'netlist not available (expired?)');
+  return r.json();
 }
 
 export async function fetchWave(jobId: string): Promise<string> {

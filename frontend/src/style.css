@@ -307,6 +307,35 @@ main {
 .wv-canvas-wrap { position: relative; min-width: 0; }
 .wv-canvas-wrap canvas { display: block; cursor: crosshair; touch-action: none; }
 
+/* ── Virtual board ─────────────────────────────────────────────────────── */
+#vboard[hidden] { display: none; }
+.vb { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+.vb-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 14px; }
+.vb-toolbar .btn-primary, .vb-toolbar .btn-tertiary, .vb-toolbar .btn-ghost { height: 32px; }
+.vb-speed { display: inline-flex; align-items: center; gap: 6px; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--hf-text-muted); }
+.vb-speed select { height: 32px; }
+.vb-status { flex-basis: 100%; font-family: var(--font-mono); font-size: 0.75rem; color: var(--hf-text-muted); }
+.vb-board { width: calc(100% - 28px); margin: 0 14px 14px; height: auto; user-select: none; touch-action: none; }
+.vb-pcb { fill: #0E3B2E; }
+.vb-name { font-family: var(--font-display); font-weight: 700; font-size: 30px; fill: #E8ECF4; }
+.vb-chip { fill: #111827; }
+.vb-chip-label { font-family: var(--font-display); font-weight: 700; font-size: 18px; fill: #E8ECF4; text-anchor: middle; }
+.vb-label { font-family: var(--font-mono); font-size: 13px; font-weight: 600; fill: #C8E4D8; text-anchor: middle; pointer-events: none; }
+.vb-digit { fill: #05130E; }
+.vb-seg { fill: #FF3B30; opacity: 0.12; }
+.vb-seg.vb-lit { filter: drop-shadow(0 0 4px #FF3B30); }
+.vb-led { fill: #2BFF88; opacity: 0.18; }
+.vb-led.vb-lit { filter: drop-shadow(0 0 6px #2BFF88); }
+.vb-led.vb-unmapped { fill: #3A4A5E; }
+.vb-btn { cursor: pointer; }
+.vb-btn-cap { fill: #C9CED8; stroke: #6B7280; stroke-width: 3; transition: transform 0.05s; }
+.vb-btn.vb-pressed .vb-btn-cap { fill: #8B93A1; transform: scale(0.9); }
+.vb-sw { cursor: pointer; }
+.vb-sw-slot { fill: #05130E; stroke: #2A3342; }
+.vb-sw-knob { fill: #E8ECF4; transition: y 0.08s; }
+.vb-sw.vb-on .vb-sw-knob { y: 3px; }
+.vb-unmapped { opacity: 0.35; cursor: not-allowed; }
+
 /* ── Circuit editor ────────────────────────────────────────────────────── */
 #circuit[hidden] { display: none; }
 #new-circuit { margin: 6px 12px 0; width: auto; }

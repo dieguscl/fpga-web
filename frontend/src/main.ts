@@ -4,7 +4,7 @@ import '@fontsource/inter/400.css';
 import '@fontsource/inter/600.css';
 import '@fontsource/inter/700.css';
 import '@fontsource/jetbrains-mono/400.css';
-import { ApiError, fetchBitstream, fetchWave, submitSim, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent } from './api';
+import { ApiError, fetchBitstream, fetchNetlist, fetchWave, submitNetlist, submitSim, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent } from './api';
 import { Editor } from './editor';
 import { parseLocations } from './errors';
 import { applyTheme, getTheme, onThemeChange, setTheme, type ThemeChoice } from './theme';
@@ -14,6 +14,7 @@ import { findModulePorts } from './verilog-ports';
 import { generateTestbench, testbenchName } from './tbgen';
 import { parseVcd } from './vcd';
 import { WaveformViewer } from './waveform';
+import { VirtualBoard } from './boardsim/board';
 import { CircuitEditor } from './circuit/editor';
 import { emptyCircuit, parseCircuit, serializeCircuit, type Circuit } from './circuit/model';
 import { subInterfaces } from './circuit/sim';
@@ -144,7 +145,7 @@ function plannerApplies(name: string): boolean {
 }
 
 // Editor panel tabs: the code/planner view, or the last simulation's waveform.
-let mainTab: 'code' | 'wave' = 'code';
+let mainTab: 'code' | 'wave' | 'board' = 'code';
 const waveViewer = new WaveformViewer($('wave'));
 
 // ── Drawn circuits (.circ) ─────────────────────────────────────────────────
@@ -205,11 +206,45 @@ function sourceFiles(): Record<string, string> {
   return Object.fromEntries(Object.entries(project.files).filter(([n]) => !n.endsWith('.circ')));
 }
 
+// Virtual Basys 3 (Board tab): builds a gate-level netlist on the server and runs it in a worker.
+const VBOARD_BOARDS = new Set(['basys3']);
+const virtualBoard = new VirtualBoard($('vboard'), {
+  load: async (speedup) => {
+    const top = $<HTMLInputElement>('top').value.trim() || project.top;
+    const xdcName = Object.keys(project.files).find((n) => n.endsWith('.xdc'));
+    resetOutput();
+    const gen = buildGen;
+    appendLog('== virtual board');
+    const { job_id } = await submitNetlist({ board: project.board, top, files: sourceFiles(), speedup });
+    await new Promise<void>((resolve, reject) => {
+      closeStream = streamEvents(job_id, (ev) => {
+        if (gen !== buildGen) return reject(new Error('cancelled'));
+        if (ev.type === 'step') appendLog(`== ${ev.name}`);
+        else if (ev.type === 'log') appendLog(ev.line);
+        else if (ev.type === 'error') reject(new Error(ev.message));
+        else if (ev.type === 'done') resolve();
+      });
+    });
+    const netlist = (await fetchNetlist(job_id)) as { modules: Record<string, { ports: Record<string, { bits: (number | string)[]; offset?: number }> }> };
+    return { netlist, top, xdc: xdcName ? project.files[xdcName] : '' };
+  },
+});
+
 function showView() {
+  $('tab-board').hidden = !(project && VBOARD_BOARDS.has(project.board));
+  if (mainTab === 'board' && $('tab-board').hidden) mainTab = 'code';
+  const vboard = mainTab === 'board';
+  $('vboard').hidden = !vboard;
+  if (!vboard) virtualBoard.stop();
+  $('tab-board').classList.toggle('active', vboard);
   const wave = mainTab === 'wave' && !$('tab-wave').hidden;
   $('wave').hidden = !wave;
-  $('tab-code').classList.toggle('active', !wave);
+  $('tab-code').classList.toggle('active', !wave && !vboard);
   $('tab-wave').classList.toggle('active', wave);
+  if (vboard) {
+    for (const id of ['circuit', 'planner', 'editor', 'view-toggle']) $(id).hidden = true;
+    return;
+  }
   const circuit = !wave && currentFile.endsWith('.circ');
   $('circuit').hidden = !circuit;
   const usePlanner = !wave && !circuit && plannerApplies(currentFile);
@@ -389,7 +424,7 @@ async function build() {
         else if (ev.type === 'step') { setStatus('status.running', { step: ev.name }); appendLog(`== ${ev.name}`); }
         else if (ev.type === 'log') appendLog(ev.line);
         else if (ev.type === 'error') { setStatus('status.buildFailed', { msg: ev.message }, 'err'); enableRun(); }
-        else if (ev.type === 'done' && ev.kind !== 'sim') {
+        else if (ev.type === 'done' && 'bitstream' in ev) {
           renderSummary(ev);
           const data = await fetchBitstream(job_id);
           if (gen !== buildGen) return; // superseded while fetching the bitstream: never set lastBitstream/download/flash
@@ -567,6 +602,7 @@ async function init() {
   $('view-board').onclick = () => { fileView = 'board'; showView(); };
   $('tab-code').onclick = () => { mainTab = 'code'; showView(); };
   $('tab-wave').onclick = () => { mainTab = 'wave'; showView(); };
+  $('tab-board').onclick = () => { mainTab = 'board'; showView(); };
   $('simulate').onclick = () => void simulate();
   $('new-tb').onclick = newTestbench;
   $('new-circuit').onclick = newCircuit;
@@ -631,6 +667,7 @@ function initLanguage() {
   onLangChange(() => {
     applyStatic();
     circuitEditor.relabel();
+    virtualBoard.relabel();
     setStatus(lastStatus.key, lastStatus.vars, lastStatus.kind);
     if (project) {
       renderFiles();
