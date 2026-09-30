@@ -570,3 +570,18 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 16px; }
 @media (max-width: 520px) { .about-stack { grid-template-columns: 1fr; } .about-stack dd { margin-bottom: 6px; } }
 #settings-dialog { max-width: min(560px, calc(100vw - 32px)); }
 #settings-dialog { max-height: calc(100vh - 32px); overflow: auto; }
+
+/* ── Icon buttons ──────────────────────────────────────────────────────── */
+button[data-icon] { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.btn-ico { width: 16px; height: 16px; flex: none; stroke-width: 2; }
+.btn-icon-only { width: 34px; padding: 0; }
+.btn-icon-only .btn-ico { width: 17px; height: 17px; }
+.btn-block[data-icon] { justify-content: flex-start; }
+@media (max-width: 720px) {
+  /* narrow screens: header actions collapse to icons (the label stays in aria) */
+  header button[data-icon] .btn-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  header button[data-icon] { width: 34px; padding: 0; }
+}
+.ce-tools .btn-icon-only { width: 30px; }
+.ce-pal-btn:has(.ce-pal-ico) { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-start; padding: 0 8px; }
+.ce-pal-ico { flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; }

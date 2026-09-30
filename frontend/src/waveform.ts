@@ -4,6 +4,7 @@
 // Signal names from the VCD are user-controlled: DOM text via textContent,
 // canvas text via fillText — never innerHTML.
 
+import { iconButton } from './icons';
 import { t } from './i18n';
 import { changeIndexAt, formatTime, formatValue, valueAt, type Radix, type Vcd, type VcdSignal } from './vcd';
 
@@ -41,13 +42,11 @@ export class WaveformViewer {
     this.titleEl = el('span', 'wv-title');
     this.rangeEl = el('span', 'wv-range');
     this.cursorEl = el('span', 'wv-cursor-label');
-    const add = button('btn-ghost', 'wv.signals', () => this.togglePicker());
+    const add = iconButton('listPlus', 'wv.signals', 'btn-ghost', () => this.togglePicker(), true);
     add.id = 'wv-signals';
-    const zin = button('btn-ghost btn-icon', '', () => this.zoom(2), '+');
-    const zout = button('btn-ghost btn-icon', '', () => this.zoom(0.5), '−');
-    const fit = button('btn-ghost', 'wv.fit', () => this.fit());
-    zin.title = t('wv.zoomIn');
-    zout.title = t('wv.zoomOut');
+    const zin = iconButton('zoomIn', 'wv.zoomIn', 'btn-ghost', () => this.zoom(2));
+    const zout = iconButton('zoomOut', 'wv.zoomOut', 'btn-ghost', () => this.zoom(0.5));
+    const fit = iconButton('fit', 'wv.fit', 'btn-ghost', () => this.fit());
     bar.append(this.titleEl, this.rangeEl, this.cursorEl, add, zout, zin, fit);
 
     this.picker = el('div', 'wv-picker');
@@ -383,15 +382,4 @@ function el(tag: string, cls = ''): HTMLElement {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
   return n;
-}
-
-function button(cls: string, key: string, onClick: () => void, text?: string): HTMLButtonElement {
-  const b = document.createElement('button');
-  b.className = cls;
-  if (key) {
-    b.dataset.i18n = key;
-    b.textContent = t(key as Parameters<typeof t>[0]);
-  } else b.textContent = text ?? '';
-  b.onclick = onClick;
-  return b;
 }

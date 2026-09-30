@@ -21,7 +21,7 @@ const en = {
   'btn.usbSetup': 'USB setup',
   'btn.usbSetup.title': 'USB setup for flashing',
   'label.files': 'Files',
-  'btn.newFile': '+ New file',
+  'btn.newFile': 'New file',
   'view.board': 'Board',
   'view.text': 'Text',
   'label.output': 'Output',
@@ -103,7 +103,7 @@ const en = {
   'help.mac.body': 'No setup is usually needed. If the board is not listed, unplug it, close apps using its serial port, and try again.',
   'help.other.title': 'Setup',
   'help.other.body': 'Use Chrome or Edge on Linux, Windows or macOS to flash from the browser.',  'btn.simulate': 'Simulate',
-  'btn.newTb': '+ Testbench',
+  'btn.newTb': 'Testbench',
   'tab.code': 'Code',
   'tab.wave': 'Waveform',
   'status.simOk': 'Simulation finished',
@@ -169,6 +169,8 @@ const en = {
   'ce.enterValue': 'Value for this {bits}-bit input (e.g. 0x1f, 31 or 0b11111)',
   'ce.hint': 'Click a part, then click the canvas to place it (Shift keeps placing). Drag from a pin or a wire end to draw a wire; drag on empty space to box-select (Shift adds). Moving parts drags their wires along. R rotates, Del deletes, Ctrl+A selects all, Ctrl+Z undoes. Ctrl+wheel zooms; wheel or right-drag pans. Ctrl+C / Ctrl+V copy and paste (at the mouse), Ctrl+D duplicates.',
   'ce.fullscreen': 'Fullscreen',
+  'ce.zoomIn': 'Zoom in',
+  'ce.zoomOut': 'Zoom out',
   'ce.copy': 'Copy',
   'ce.paste': 'Paste',
   'tab.board': 'Board',
@@ -195,7 +197,7 @@ const en = {
   'ce.p.value': 'Value',
   'ce.p.parts': 'Widths (low bits first)',
   'ce.oscillating': 'The circuit oscillates: a combinational loop never settles.',
-  'btn.newCircuit': '+ Circuit',
+  'btn.newCircuit': 'Circuit',
   'prompt.circuitName': 'Circuit name (letters, digits and _)',
   'alert.badCircuitName': 'Use letters, digits and _ only, starting with a letter.',
 };
@@ -214,7 +216,7 @@ const ptPT: Record<Key, string> = {
   'btn.usbSetup': 'Configurar USB',
   'btn.usbSetup.title': 'Configuração USB para gravar a placa',
   'label.files': 'Ficheiros',
-  'btn.newFile': '+ Novo ficheiro',
+  'btn.newFile': 'Novo ficheiro',
   'view.board': 'Placa',
   'view.text': 'Texto',
   'label.output': 'Resultado',
@@ -296,7 +298,7 @@ const ptPT: Record<Key, string> = {
   'help.mac.body': 'Normalmente não é preciso configurar nada. Se a placa não aparecer, desligue-a, feche as aplicações que usam a porta série e tente de novo.',
   'help.other.title': 'Configuração',
   'help.other.body': 'Use o Chrome ou o Edge em Linux, Windows ou macOS para gravar a partir do navegador.',  'btn.simulate': 'Simular',
-  'btn.newTb': '+ Testbench',
+  'btn.newTb': 'Testbench',
   'tab.code': 'Código',
   'tab.wave': 'Formas de onda',
   'status.simOk': 'Simulação concluída',
@@ -362,6 +364,8 @@ const ptPT: Record<Key, string> = {
   'ce.enterValue': 'Valor para esta entrada de {bits} bits (ex.: 0x1f, 31 ou 0b11111)',
   'ce.hint': 'Clique num componente e depois no desenho para o colocar (Shift continua a colocar). Arraste a partir de um pino ou da ponta de um fio para desenhar um fio; arraste num espaço vazio para selecionar com uma caixa (Shift acrescenta). Os fios acompanham os componentes que move. R roda, Del elimina, Ctrl+A seleciona tudo, Ctrl+Z desfaz. Ctrl+roda faz zoom; roda ou arrastar com o botão direito desloca. Ctrl+C / Ctrl+V copiam e colam (no rato), Ctrl+D duplica.',
   'ce.fullscreen': 'Ecrã inteiro',
+  'ce.zoomIn': 'Aumentar zoom',
+  'ce.zoomOut': 'Diminuir zoom',
   'ce.copy': 'Copiar',
   'ce.paste': 'Colar',
   'tab.board': 'Placa',
@@ -388,7 +392,7 @@ const ptPT: Record<Key, string> = {
   'ce.p.value': 'Valor',
   'ce.p.parts': 'Larguras (bits baixos primeiro)',
   'ce.oscillating': 'O circuito oscila: um ciclo combinacional nunca estabiliza.',
-  'btn.newCircuit': '+ Circuito',
+  'btn.newCircuit': 'Circuito',
   'prompt.circuitName': 'Nome do circuito (letras, dígitos e _)',
   'alert.badCircuitName': 'Use apenas letras, dígitos e _, começando por uma letra.',
 };
@@ -405,7 +409,7 @@ const es: Record<Key, string> = {
   'btn.usbSetup': 'Configurar USB',
   'btn.usbSetup.title': 'Configuración USB para grabar la placa',
   'label.files': 'Archivos',
-  'btn.newFile': '+ Nuevo archivo',
+  'btn.newFile': 'Nuevo archivo',
   'view.board': 'Placa',
   'view.text': 'Texto',
   'label.output': 'Salida',
@@ -487,7 +491,7 @@ const es: Record<Key, string> = {
   'help.mac.body': 'Normalmente no hace falta configurar nada. Si la placa no aparece, desconéctala, cierra las aplicaciones que usen su puerto serie y vuelve a intentarlo.',
   'help.other.title': 'Configuración',
   'help.other.body': 'Usa Chrome o Edge en Linux, Windows o macOS para grabar desde el navegador.',  'btn.simulate': 'Simular',
-  'btn.newTb': '+ Testbench',
+  'btn.newTb': 'Testbench',
   'tab.code': 'Código',
   'tab.wave': 'Formas de onda',
   'status.simOk': 'Simulación terminada',
@@ -553,6 +557,8 @@ const es: Record<Key, string> = {
   'ce.enterValue': 'Valor para esta entrada de {bits} bits (p. ej. 0x1f, 31 o 0b11111)',
   'ce.hint': 'Haz clic en un componente y luego en el lienzo para colocarlo (Shift sigue colocando). Arrastra desde un pin o el extremo de un cable para dibujar un cable; arrastra en un espacio vacío para seleccionar con una caja (Shift añade). Los cables siguen a los componentes que mueves. R gira, Supr elimina, Ctrl+A selecciona todo, Ctrl+Z deshace. Ctrl+rueda hace zoom; la rueda o arrastrar con el botón derecho desplaza. Ctrl+C / Ctrl+V copian y pegan (en el ratón), Ctrl+D duplica.',
   'ce.fullscreen': 'Pantalla completa',
+  'ce.zoomIn': 'Acercar',
+  'ce.zoomOut': 'Alejar',
   'ce.copy': 'Copiar',
   'ce.paste': 'Pegar',
   'tab.board': 'Placa',
@@ -579,7 +585,7 @@ const es: Record<Key, string> = {
   'ce.p.value': 'Valor',
   'ce.p.parts': 'Anchos (bits bajos primero)',
   'ce.oscillating': 'El circuito oscila: un bucle combinacional nunca se estabiliza.',
-  'btn.newCircuit': '+ Circuito',
+  'btn.newCircuit': 'Circuito',
   'prompt.circuitName': 'Nombre del circuito (letras, dígitos y _)',
   'alert.badCircuitName': 'Usa solo letras, dígitos y _, empezando por una letra.',
 };
@@ -633,7 +639,10 @@ export function t(key: Key, vars: Record<string, string | number> = {}): string 
 
 /** Translate static markup: data-i18n (text), data-i18n-title, data-i18n-aria. */
 export function applyStatic(root: ParentNode = document): void {
-  root.querySelectorAll<HTMLElement>('[data-i18n]').forEach((el) => (el.textContent = t(el.dataset.i18n as Key)));
+  root.querySelectorAll<HTMLElement>('[data-i18n]').forEach((el) => {
+    const target = el.querySelector(':scope > .btn-label') ?? el; // icon buttons keep their icon
+    target.textContent = t(el.dataset.i18n as Key);
+  });
   root.querySelectorAll<HTMLElement>('[data-i18n-title]').forEach((el) => (el.title = t(el.dataset.i18nTitle as Key)));
   root.querySelectorAll<HTMLElement>('[data-i18n-aria]').forEach((el) => el.setAttribute('aria-label', t(el.dataset.i18nAria as Key)));
 }

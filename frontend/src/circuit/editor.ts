@@ -2,7 +2,8 @@
 // rotating, wiring on a grid, properties, undo/redo, and a live-simulation mode.
 // Labels and names are user text: SVG/DOM text via textContent only.
 
-import { t, type Key } from '../i18n';
+import { applyStatic, t, type Key } from '../i18n';
+import { iconButton, setIconButton } from '../icons';
 import {
   GATES, GRID, MAX_BITS, bitsOf, compDef, emptyCircuit, inputInverted, placedPins,
   type Circuit, type Comp, type CompType, type Pt, type Rot, type SubInterface, type Wire,
@@ -92,23 +93,23 @@ export class CircuitEditor {
     }
     this.editTools = div('ce-tools');
     this.editTools.append(
-      button('ce.undo', () => this.doUndo(), 'btn-ghost'),
-      button('ce.redo', () => this.doRedo(), 'btn-ghost'),
-      button('ce.rotate', () => this.rotateSelected(), 'btn-ghost'),
-      button('ce.delete', () => this.deleteSelected(), 'btn-ghost'),
-      button('ce.copy', () => this.copy(), 'btn-ghost'),
-      button('ce.paste', () => this.paste(false), 'btn-ghost'),
+      iconButton('undo', 'ce.undo', 'btn-ghost', () => this.doUndo()),
+      iconButton('redo', 'ce.redo', 'btn-ghost', () => this.doRedo()),
+      iconButton('rotate', 'ce.rotate', 'btn-ghost', () => this.rotateSelected()),
+      iconButton('trash', 'ce.delete', 'btn-ghost', () => this.deleteSelected()),
+      iconButton('copy', 'ce.copy', 'btn-ghost', () => this.copy()),
+      iconButton('paste', 'ce.paste', 'btn-ghost', () => this.paste(false)),
     );
     this.simTools = div('ce-tools');
-    this.runBtn = button('ce.run', () => this.toggleRun(), 'btn-primary');
+    this.runBtn = iconButton('play', 'ce.run', 'btn-primary', () => this.toggleRun(), true);
     this.speed = document.createElement('select');
     for (const hz of [1, 2, 5, 10, 50]) this.speed.append(new Option(`${hz} Hz`, String(hz), false, hz === 2));
     this.speed.onchange = () => { if (this.timer !== null) { this.stopRun(); this.toggleRun(); } };
-    this.simTools.append(button('ce.step', () => this.step(), 'btn-tertiary'), this.runBtn, this.speed,
-      button('ce.reset', () => this.resetSim(), 'btn-ghost'));
+    this.simTools.append(iconButton('step', 'ce.step', 'btn-tertiary', () => this.step()), this.runBtn, this.speed,
+      iconButton('reset', 'ce.reset', 'btn-ghost', () => this.resetSim()));
     const zoom = div('ce-tools');
-    zoom.append(button('', () => this.zoomBy(1 / 1.2), 'btn-ghost btn-icon', '−'), button('', () => this.zoomBy(1.2), 'btn-ghost btn-icon', '+'),
-      button('wv.fit', () => this.fit(), 'btn-ghost'), button('ce.fullscreen', () => this.toggleFullscreen(), 'btn-ghost'));
+    zoom.append(iconButton('zoomOut', 'ce.zoomOut', 'btn-ghost', () => this.zoomBy(1 / 1.2)), iconButton('zoomIn', 'ce.zoomIn', 'btn-ghost', () => this.zoomBy(1.2)),
+      iconButton('fit', 'wv.fit', 'btn-ghost', () => this.fit()), iconButton('fullscreen', 'ce.fullscreen', 'btn-ghost', () => this.toggleFullscreen()));
     bar.append(modes, this.editTools, this.simTools, zoom);
 
     const body = div('ce-body');
@@ -146,7 +147,7 @@ export class CircuitEditor {
 
   /** Re-render labels after a language change. */
   relabel(): void {
-    this.host.querySelectorAll<HTMLElement>('[data-i18n]').forEach((el) => (el.textContent = t(el.dataset.i18n as Key)));
+    applyStatic(this.host);
     this.renderPalette();
     this.render();
   }
@@ -290,16 +291,14 @@ export class CircuitEditor {
     if (this.timer !== null) return this.stopRun();
     const hz = Number(this.speed.value) || 2;
     this.timer = window.setInterval(() => this.step(), 500 / hz); // two ticks per period
-    this.runBtn.dataset.i18n = 'ce.pause';
-    this.runBtn.textContent = t('ce.pause');
+    setIconButton(this.runBtn, 'pause', 'ce.pause', true);
   }
 
   private stopRun(): void {
     if (this.timer !== null) window.clearInterval(this.timer);
     this.timer = null;
     if (this.runBtn) {
-      this.runBtn.dataset.i18n = 'ce.run';
-      this.runBtn.textContent = t('ce.run');
+      setIconButton(this.runBtn, 'play', 'ce.run', true);
     }
   }
 
@@ -538,8 +537,14 @@ export class CircuitEditor {
         const b = document.createElement('button');
         b.className = 'ce-pal-btn';
         b.dataset.type = it.type;
-        b.textContent = it.type === 'sub' ? it.props!.circuit! : t(it.key);
-        b.title = b.textContent;
+        const name = it.type === 'sub' ? it.props!.circuit! : t(it.key);
+        b.title = name;
+        const sym = gateIcon(it.type);
+        if (sym) {
+          const span = document.createElement('span');
+          span.textContent = name;
+          b.append(sym, span);
+        } else b.textContent = name;
         b.onclick = () => {
           this.placing = { id: '', type: it.type, x: this.hover.x, y: this.hover.y, rot: 0,
             props: { ...(it.props ?? {}), ...(this.defaultLabel(it.type) ? { label: this.defaultLabel(it.type) } : {}) } };
@@ -631,7 +636,7 @@ export class CircuitEditor {
     if (c.type === 'const' || c.type === 'in') field('ce.p.value', num(c.props.value ?? 0, 0, 0xffffffff, (v) => (c.props.value = v)));
     if (c.type === 'split' || c.type === 'merge') field('ce.p.parts', text(c.props.parts ?? '1,1', (v) => (c.props.parts = v)));
     const actions = div('ce-prop-actions');
-    actions.append(button('ce.rotate', () => this.rotateSelected(), 'btn-ghost'), button('ce.delete', () => this.deleteSelected(), 'btn-ghost'));
+    actions.append(iconButton('rotate', 'ce.rotate', 'btn-ghost', () => this.rotateSelected(), true), iconButton('trash', 'ce.delete', 'btn-ghost', () => this.deleteSelected(), true));
     rows.push(actions);
     this.props.replaceChildren(...rows);
   }
@@ -854,6 +859,18 @@ function el(tag: string, attrs: Record<string, string | number>): SVGElement {
  * backX(y) is where an input line meets the (possibly curved) back of the body.
  */
 const BUBBLE = 4; // inversion bubble radius (px)
+
+/** Small gate symbol for the palette buttons. */
+function gateIcon(type: CompType): SVGElement | null {
+  if (!GATES.includes(type) && type !== 'not') return null;
+  const inv = ['nand', 'nor', 'xnor', 'not'].includes(type);
+  const svg = el('svg', { viewBox: '-1 -1 30 18', width: 26, height: 16, class: 'ce-pal-ico', 'aria-hidden': 'true' });
+  const shape = gateShape(type, 0, 16, inv ? 21 : 27);
+  svg.append(el('path', { d: shape.body }));
+  if (shape.extra) svg.append(el('path', { d: shape.extra }));
+  if (inv) svg.append(el('circle', { cx: 24.5, cy: 8, r: 3 }));
+  return svg;
+}
 
 /** Gate outline between x=left and x=right; backX gives where an input stub meets the body. */
 export function gateShape(type: CompType, top: number, bot: number, right: number, left = 0): { body: string; extra?: string; backX: (y: number) => number } {

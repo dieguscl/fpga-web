@@ -1,8 +1,9 @@
 // Interactive virtual Basys 3: switches and buttons drive the design, LEDs and the
 // 4-digit 7-segment display show its outputs. Wiring comes from the project's
 // .xdc (the same file the pin planner edits), so it behaves like the real board.
+import { iconButton, setIconButton } from '../icons';
 import { BASYS3_PINS } from '../boards/basys3-pins';
-import { t, type Key } from '../i18n';
+import { applyStatic, t, type Key } from '../i18n';
 import { parseXdc } from '../xdc';
 import type { FromWorker, ToWorker, Watch } from './worker';
 
@@ -66,10 +67,10 @@ export class VirtualBoard {
     host.classList.add('vb');
     const bar = document.createElement('div');
     bar.className = 'vb-toolbar';
-    this.loadBtn = btn('vb.load', 'btn-primary', () => void this.load());
-    this.runBtn = btn('vb.run', 'btn-tertiary', () => this.toggleRun());
+    this.loadBtn = iconButton('cpu', 'vb.load', 'btn-primary', () => void this.load(), true);
+    this.runBtn = iconButton('play', 'vb.run', 'btn-tertiary', () => this.toggleRun(), true);
     this.runBtn.disabled = true;
-    const reset = btn('ce.reset', 'btn-ghost', () => this.reset());
+    const reset = iconButton('reset', 'ce.reset', 'btn-ghost', () => this.reset());
     const speedLabel = document.createElement('label');
     speedLabel.className = 'vb-speed';
     const sl = document.createElement('span');
@@ -91,7 +92,7 @@ export class VirtualBoard {
   }
 
   relabel(): void {
-    this.host.querySelectorAll<HTMLElement>('[data-i18n]').forEach((el) => (el.textContent = t(el.dataset.i18n as Key)));
+    applyStatic(this.host);
     this.speed.options[0].text = t('vb.speedOff');
     this.speed.title = t('vb.speedupHelp');
     this.setStatus(this.statusKey, this.statusVars);
@@ -100,8 +101,7 @@ export class VirtualBoard {
   stop(): void {
     this.post({ type: 'pause' });
     this.running = false;
-    this.runBtn.textContent = t('vb.run');
-    this.runBtn.dataset.i18n = 'vb.run';
+    setIconButton(this.runBtn, 'play', 'vb.run', true);
   }
 
   private setStatus(key: Key, vars: Record<string, string | number> = {}): void {
@@ -164,8 +164,7 @@ export class VirtualBoard {
     if (this.running) return this.stop();
     this.running = true;
     this.post({ type: 'run' });
-    this.runBtn.textContent = t('vb.pause');
-    this.runBtn.dataset.i18n = 'vb.pause';
+    setIconButton(this.runBtn, 'pause', 'vb.pause', true);
   }
 
   private reset(): void {
@@ -269,13 +268,4 @@ export class VirtualBoard {
       el.classList.toggle('vb-lit', b > 0.05);
     }));
   }
-}
-
-function btn(key: Key, cls: string, onClick: () => void): HTMLButtonElement {
-  const b = document.createElement('button');
-  b.className = cls;
-  b.dataset.i18n = key;
-  b.textContent = t(key);
-  b.onclick = onClick;
-  return b;
 }

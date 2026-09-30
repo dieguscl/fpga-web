@@ -3,8 +3,9 @@
 // All user-derived text (port names, file contents) goes through textContent
 // or option.text — never innerHTML.
 
+import { setIconButton } from './icons';
 import { BASYS3_PINS, type PinDef } from './boards/basys3-pins';
-import { onLangChange, t, type Key } from './i18n';
+import { applyStatic, onLangChange, t, type Key } from './i18n';
 import { expandBits, type PortBit, type PortScan } from './verilog-ports';
 import { generateXdc, parseXdc, type XdcModel } from './xdc';
 
@@ -149,6 +150,8 @@ export class PinPlanner {
     const clear = document.createElement('button');
     clear.className = 'btn-ghost';
     clear.dataset.i18n = 'pp.clear';
+    setIconButton(auto, 'wand', 'pp.auto', true);
+    setIconButton(clear, 'eraser', 'pp.clear', true);
     clear.onclick = () => {
       if (this.model.assign.size && !confirm(t('pp.clearConfirm'))) return;
       this.model.assign = new Map();
@@ -181,7 +184,7 @@ export class PinPlanner {
 
   /** Apply the current language to the static parts of the widget. */
   private relabel(): void {
-    this.host.querySelectorAll<HTMLElement | SVGElement>('[data-i18n]').forEach((el) => (el.textContent = t(el.dataset.i18n as Key)));
+    applyStatic(this.host);
     this.svg.setAttribute('aria-label', t('pp.boardAria'));
   }
 

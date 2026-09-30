@@ -26,9 +26,9 @@
       <span class="label" data-i18n="label.project">Project</span>
       <div class="row">
         <select id="project" aria-label="Project" disabled></select>
-        <button id="new-project" class="btn-ghost" disabled data-i18n="btn.new">New</button>
-        <button id="import" class="btn-ghost" disabled data-i18n="btn.import">Import</button>
-        <button id="export" class="btn-ghost" disabled data-i18n="btn.export">Export</button>
+        <button id="new-project" data-icon="folderPlus" class="btn-ghost" disabled data-i18n="btn.new">New</button>
+        <button id="import" data-icon="upload" class="btn-ghost" disabled data-i18n="btn.import">Import</button>
+        <button id="export" data-icon="download" class="btn-ghost" disabled data-i18n="btn.export">Export</button>
       </div>
     </div>
 
@@ -41,8 +41,8 @@
     </div>
 
     <div class="topbar-end">
-      <button id="help" class="btn-ghost btn-icon" title="USB setup for flashing" data-i18n="btn.usbSetup" data-i18n-title="btn.usbSetup.title">USB setup</button>
-      <button id="settings" class="btn-ghost btn-icon" title="Settings" data-i18n-title="settings.title" data-i18n-aria="settings.title" aria-label="Settings">⚙</button>
+      <button id="help" data-icon="usb" class="btn-ghost" title="USB setup for flashing" data-i18n="btn.usbSetup" data-i18n-title="btn.usbSetup.title">USB setup</button>
+      <button id="settings" data-icon="settings" class="btn-ghost btn-icon" title="Settings" data-i18n-title="settings.title" data-i18n-aria="settings.title" aria-label="Settings">⚙</button>
     </div>
   </header>
 
@@ -50,9 +50,9 @@
     <aside class="panel panel-files">
       <div class="panel-head"><span class="label" data-i18n="label.files">Files</span></div>
       <ul id="file-list"></ul>
-      <button id="add-file" class="btn-ghost btn-block" disabled data-i18n="btn.newFile">+ New file</button>
-      <button id="new-tb" class="btn-ghost btn-block" disabled data-i18n="btn.newTb">+ Testbench</button>
-      <button id="new-circuit" class="btn-ghost btn-block" disabled data-i18n="btn.newCircuit">+ Circuit</button>
+      <button id="add-file" data-icon="filePlus" class="btn-ghost btn-block" disabled data-i18n="btn.newFile">+ New file</button>
+      <button id="new-tb" data-icon="flask" class="btn-ghost btn-block" disabled data-i18n="btn.newTb">+ Testbench</button>
+      <button id="new-circuit" data-icon="board" class="btn-ghost btn-block" disabled data-i18n="btn.newCircuit">+ Circuit</button>
     </aside>
     <section class="panel panel-editor">
       <div class="editor-bar">
@@ -75,10 +75,10 @@
     <section id="output" class="panel panel-output">
       <div class="panel-head"><span class="label" data-i18n="label.output">Output</span></div>
       <div class="actions">
-        <button id="build" class="btn-primary" disabled data-i18n="btn.build">Build</button>
-        <button id="simulate" class="btn-tertiary" disabled data-i18n="btn.simulate">Simulate</button>
+        <button id="build" data-icon="hammer" class="btn-primary" disabled data-i18n="btn.build">Build</button>
+        <button id="simulate" data-icon="activity" class="btn-tertiary" disabled data-i18n="btn.simulate">Simulate</button>
         <select id="testbench" class="tb-select" aria-label="Testbench" hidden></select>
-        <button id="flash" class="btn-tertiary" disabled data-i18n="btn.flash">Flash</button>
+        <button id="flash" data-icon="zap" class="btn-tertiary" disabled data-i18n="btn.flash">Flash</button>
         <a id="download" class="btn-ghost" hidden data-i18n="btn.download">Download</a>
         <span class="actions-gap"></span>
         <label class="check"><input type="checkbox" id="lint" checked /><span data-i18n="chk.lint">Lint</span></label>

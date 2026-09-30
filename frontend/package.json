@@ -20,7 +20,8 @@
     "@yowasp/openfpgaloader": "1.1.1-179.268",
     "codemirror": "^6.0.1",
     "fflate": "^0.8.2",
-    "idb-keyval": "^6.2.1"
+    "idb-keyval": "^6.2.1",
+    "lucide": "^1.49.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.47.0",

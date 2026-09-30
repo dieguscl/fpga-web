@@ -8,6 +8,7 @@ import { ApiError, fetchBitstream, fetchNetlist, fetchWave, submitNetlist, submi
 import { Editor } from './editor';
 import { parseLocations } from './errors';
 import { applyTheme, getTheme, onThemeChange, setTheme, type ThemeChoice } from './theme';
+import { decorateIcons } from './icons';
 import { applyStatic, getLang, LANGS, onLangChange, setLang, t, type Key, type Lang } from './i18n';
 import { PinPlanner } from './pinplanner';
 import { findModulePorts } from './verilog-ports';
@@ -663,6 +664,7 @@ function initLanguage() {
   for (const l of LANGS) sel.append(new Option(names[l.id], l.id, false, l.id === getLang()));
   sel.onchange = () => setLang(sel.value as Lang);
   document.documentElement.lang = getLang();
+  decorateIcons();
   applyStatic();
   onLangChange(() => {
     applyStatic();

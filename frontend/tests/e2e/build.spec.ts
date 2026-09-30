@@ -41,7 +41,7 @@ test('basys3 pin planner: clear, auto-assign, build', async ({ page }) => {
   page.once('dialog', (d) => d.accept('planner'));
   await page.click('#new-project');
   await page.locator('#file-list li', { hasText: 'basys3.xdc' }).click();
-  await expect(page.locator('#planner svg')).toBeVisible();
+  await expect(page.locator('#planner svg.pp-board')).toBeVisible();
   await expect(page.locator('.pp-summary')).toContainText('17/17');
   page.once('dialog', (d) => d.accept());
   await page.getByRole('button', { name: 'Clear all' }).click();
