@@ -118,6 +118,15 @@ test('draw a circuit, get Verilog, run it live', async ({ page }) => {
   await wire(4, 7, 8, 5);
   await wire(11, 4, 14, 4);
   await expect(page.locator('.ce-problem')).toHaveCount(0);
+  // move the gate: attached wires follow and the circuit stays valid
+  await page.keyboard.press('Escape');
+  await wire(9, 4, 9, 7); // drag from the gate body
+  await expect(page.locator('.ce-problem')).toHaveCount(0);
+  // box-select both inputs and move them together
+  await wire(0.5, 0.5, 4.6, 9);
+  await expect(page.locator('.ce-comp.ce-sel')).toHaveCount(2);
+  await wire(3, 3, 3, 1);
+  await expect(page.locator('.ce-problem')).toHaveCount(0);
   await page.locator('#file-list li', { hasText: 'gates.v' }).click();
   await expect(page.locator('.cm-content')).toContainText('assign out0 = in0 & in1;');
   await page.locator('#file-list li', { hasText: 'gates.circ' }).click();

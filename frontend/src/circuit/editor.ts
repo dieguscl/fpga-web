@@ -8,6 +8,7 @@ import {
   type Circuit, type Comp, type CompType, type Pt, type Rot, type SubInterface, type Wire,
 } from './model';
 import { buildNetlist, type Net, type Netlist } from './netlist';
+import { boxSelect, emptySelection, moveSelection, wireEndAt, type Selection } from './edit-ops';
 import { CircuitSim, subInterfaces } from './sim';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -34,8 +35,9 @@ const SYMBOL: Partial<Record<CompType, string>> = {
 };
 
 type Drag =
-  | { kind: 'move'; id: string; start: Pt; orig: Pt; moved: boolean }
+  | { kind: 'move'; start: Pt; orig: Circuit; snapshot: string; moved: boolean }
   | { kind: 'wire'; from: Pt; to: Pt }
+  | { kind: 'box'; a: Pt; b: Pt; add: boolean }
   | { kind: 'pan'; sx: number; sy: number; ox: number; oy: number };
 
 export interface CircuitEditorHost {
@@ -50,7 +52,7 @@ export class CircuitEditor {
   private name = '';
   private undo: string[] = [];
   private redo: string[] = [];
-  private selected: { kind: 'comp' | 'wire'; id: string } | null = null;
+  private sel: Selection = emptySelection();
   private placing: Comp | null = null;
   private drag: Drag | null = null;
   private mode: 'edit' | 'sim' = 'edit';
@@ -99,7 +101,7 @@ export class CircuitEditor {
       button('ce.reset', () => this.resetSim(), 'btn-ghost'));
     const zoom = div('ce-tools');
     zoom.append(button('', () => this.zoomBy(1 / 1.2), 'btn-ghost btn-icon', '−'), button('', () => this.zoomBy(1.2), 'btn-ghost btn-icon', '+'),
-      button('wv.fit', () => this.fit(), 'btn-ghost'));
+      button('wv.fit', () => this.fit(), 'btn-ghost'), button('ce.fullscreen', () => this.toggleFullscreen(), 'btn-ghost'));
     bar.append(modes, this.editTools, this.simTools, zoom);
 
     const body = div('ce-body');
@@ -127,7 +129,7 @@ export class CircuitEditor {
     this.circ = structuredClone(circ);
     this.undo = [];
     this.redo = [];
-    this.selected = null;
+    this.sel = emptySelection();
     this.placing = null;
     this.setMode('edit', false);
     this.renderPalette();
@@ -161,7 +163,7 @@ export class CircuitEditor {
     if (!prev) return;
     this.redo.push(JSON.stringify(this.circ));
     this.circ = JSON.parse(prev);
-    this.selected = null;
+    this.sel = emptySelection();
     this.cb.onChange(structuredClone(this.circ));
     this.render();
   }
@@ -171,7 +173,7 @@ export class CircuitEditor {
     if (!next) return;
     this.undo.push(JSON.stringify(this.circ));
     this.circ = JSON.parse(next);
-    this.selected = null;
+    this.sel = emptySelection();
     this.cb.onChange(structuredClone(this.circ));
     this.render();
   }
@@ -194,25 +196,40 @@ export class CircuitEditor {
   }
 
   private rotateSelected(): void {
-    const c = this.selectedComp();
     if (this.placing) {
       this.placing.rot = (((this.placing.rot + 90) % 360) as Rot);
       this.render();
-    } else if (c) this.commit(() => (c.rot = ((c.rot + 90) % 360) as Rot));
+      return;
+    }
+    const comps = this.circ.components.filter((c) => this.sel.comps.has(c.id));
+    if (comps.length) this.commit(() => comps.forEach((c) => (c.rot = ((c.rot + 90) % 360) as Rot)));
   }
 
   private deleteSelected(): void {
-    const s = this.selected;
-    if (!s) return;
+    const s = this.sel;
+    if (!s.comps.size && !s.wires.size) return;
     this.commit(() => {
-      if (s.kind === 'comp') this.circ.components = this.circ.components.filter((c) => c.id !== s.id);
-      else this.circ.wires = this.circ.wires.filter((w) => w.id !== s.id);
-      this.selected = null;
+      this.circ.components = this.circ.components.filter((c) => !s.comps.has(c.id));
+      this.circ.wires = this.circ.wires.filter((w) => !s.wires.has(w.id));
+      this.sel = emptySelection();
     });
   }
 
+  /** The single selected component (properties panel), if exactly one part is selected. */
   private selectedComp(): Comp | undefined {
-    return this.selected?.kind === 'comp' ? this.circ.components.find((c) => c.id === this.selected!.id) : undefined;
+    if (this.sel.comps.size !== 1 || this.sel.wires.size) return undefined;
+    const id = [...this.sel.comps][0];
+    return this.circ.components.find((c) => c.id === id);
+  }
+
+  private selectOnly(kind: 'comp' | 'wire', id: string): void {
+    this.sel = emptySelection();
+    (kind === 'comp' ? this.sel.comps : this.sel.wires).add(id);
+  }
+
+  private toggleFullscreen(): void {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void this.host.requestFullscreen?.().then(() => requestAnimationFrame(() => this.fit())).catch(() => undefined);
   }
 
   // ── Modes / simulation ──
@@ -288,6 +305,11 @@ export class CircuitEditor {
     this.applyView();
   }
 
+  private toGridF(e: { clientX: number; clientY: number }): Pt {
+    const r = this.svg.getBoundingClientRect();
+    return { x: (e.clientX - r.left - this.view.x) / this.view.k / GRID, y: (e.clientY - r.top - this.view.y) / this.view.k / GRID };
+  }
+
   private toGrid(e: { clientX: number; clientY: number }): Pt {
     const r = this.svg.getBoundingClientRect();
     return {
@@ -323,25 +345,32 @@ export class CircuitEditor {
         const c = { ...this.placing, x: g.x, y: g.y, id: this.newId('c'), props: { ...this.placing.props } };
         this.commit(() => {
           this.circ.components.push(c);
-          this.selected = { kind: 'comp', id: c.id };
+          this.selectOnly('comp', c.id);
         });
         if (!e.shiftKey) this.placing = null; // shift-click keeps placing
         this.render();
         return;
       }
-      const target = (e.target as Element).closest('[data-comp],[data-wire]');
-      const compId = target?.getAttribute('data-comp');
-      const onPin = (e.target as Element).closest('[data-pin]');
-      if (compId && !onPin) {
-        const c = this.circ.components.find((x) => x.id === compId)!;
-        this.selected = { kind: 'comp', id: c.id };
-        this.drag = { kind: 'move', id: c.id, start: g, orig: { x: c.x, y: c.y }, moved: false };
-      } else if (target?.getAttribute('data-wire') && !onPin) {
-        this.selected = { kind: 'wire', id: target.getAttribute('data-wire')! };
+      const el0 = e.target as Element;
+      const onPin = el0.closest('[data-pin]');
+      const compId = el0.closest('[data-comp]')?.getAttribute('data-comp') ?? null;
+      const wireId = el0.closest('[data-wire]')?.getAttribute('data-wire') ?? null;
+      if (onPin || (wireId && wireEndAt(this.circ, g) && !this.sel.wires.has(wireId))) {
+        // Digital-style: wires start from a pin or from an existing wire end.
         this.drag = { kind: 'wire', from: g, to: g };
+      } else if (compId || wireId) {
+        const kind = compId ? 'comp' : 'wire';
+        const id = (compId ?? wireId)!;
+        const set = kind === 'comp' ? this.sel.comps : this.sel.wires;
+        if (e.shiftKey) {
+          if (set.has(id)) set.delete(id);
+          else set.add(id);
+        } else if (!set.has(id)) this.selectOnly(kind, id);
+        this.drag = { kind: 'move', start: g, orig: structuredClone(this.circ), snapshot: JSON.stringify(this.circ), moved: false };
       } else {
-        this.selected = null;
-        this.drag = { kind: 'wire', from: g, to: g };
+        const f = this.toGridF(e);
+        if (!e.shiftKey) this.sel = emptySelection();
+        this.drag = { kind: 'box', a: f, b: f, add: e.shiftKey };
       }
       this.svg.setPointerCapture(e.pointerId);
       this.render();
@@ -357,16 +386,16 @@ export class CircuitEditor {
         return this.applyView();
       }
       if (d?.kind === 'move') {
-        const c = this.circ.components.find((x) => x.id === d.id);
-        if (!c) return;
-        const nx = d.orig.x + g.x - d.start.x, ny = d.orig.y + g.y - d.start.y;
-        if (nx !== c.x || ny !== c.y) {
-          if (!d.moved) this.undo.push(JSON.stringify(this.circ));
-          d.moved = true;
-          c.x = nx;
-          c.y = ny;
-          this.render();
-        }
+        const dx = g.x - d.start.x, dy = g.y - d.start.y;
+        if (!d.moved && dx === 0 && dy === 0) return;
+        d.moved = true;
+        this.circ = moveSelection(d.orig, this.sel, dx, dy, this.subs);
+        this.render();
+        return;
+      }
+      if (d?.kind === 'box') {
+        d.b = this.toGridF(e);
+        this.render();
         return;
       }
       if (d?.kind === 'wire') {
@@ -383,8 +412,20 @@ export class CircuitEditor {
       const d = this.drag;
       this.drag = null;
       if (d?.kind === 'move' && d.moved) {
+        this.undo.push(d.snapshot);
+        if (this.undo.length > 100) this.undo.shift();
         this.redo = [];
+        // wires may have been split: keep only selected ids that still exist
+        const ids = new Set(this.circ.wires.map((w) => w.id));
+        for (const id of [...this.sel.wires]) if (!ids.has(id)) this.sel.wires.delete(id);
         this.cb.onChange(structuredClone(this.circ));
+      }
+      if (d?.kind === 'box') {
+        const picked = boxSelect(this.circ, d.a, d.b, this.subs);
+        if (d.add) {
+          picked.comps.forEach((id) => this.sel.comps.add(id));
+          picked.wires.forEach((id) => this.sel.wires.add(id));
+        } else this.sel = picked;
       }
       if (d?.kind === 'wire' && (d.from.x !== d.to.x || d.from.y !== d.to.y)) {
         const segs = lPath(d.from, d.to);
@@ -404,7 +445,12 @@ export class CircuitEditor {
       const mod = e.ctrlKey || e.metaKey;
       if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); this.deleteSelected(); }
       else if (e.key === 'r' || e.key === 'R') this.rotateSelected();
-      else if (e.key === 'Escape') { this.placing = null; this.selected = null; this.render(); }
+      else if (mod && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        this.sel = { comps: new Set(this.circ.components.map((c) => c.id)), wires: new Set(this.circ.wires.map((w) => w.id)) };
+        this.render();
+      }
+      else if (e.key === 'Escape') { this.placing = null; this.sel = emptySelection(); this.render(); }
       else if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); this.doUndo(); }
       else if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); this.doRedo(); }
     });
@@ -448,7 +494,7 @@ export class CircuitEditor {
         b.onclick = () => {
           this.placing = { id: '', type: it.type, x: this.hover.x, y: this.hover.y, rot: 0,
             props: { ...(it.props ?? {}), ...(this.defaultLabel(it.type) ? { label: this.defaultLabel(it.type) } : {}) } };
-          this.selected = null;
+          this.sel = emptySelection();
           this.svg.focus();
           this.render();
         };
@@ -466,7 +512,8 @@ export class CircuitEditor {
     const c = this.selectedComp();
     if (!c) {
       const p = div('ce-hint');
-      p.textContent = this.selected?.kind === 'wire' ? t('ce.wireSelected') : t('ce.noSelection');
+      const n = this.sel.comps.size + this.sel.wires.size;
+      p.textContent = n > 1 ? t('ce.multiSelected', { n }) : this.sel.wires.size ? t('ce.wireSelected') : t('ce.noSelection');
       this.props.replaceChildren(p);
       return;
     }
@@ -534,7 +581,7 @@ export class CircuitEditor {
     // Wires
     for (const w of this.circ.wires) {
       const net = nl.wireNet.get(w.id)!;
-      const cls = ['ce-wire', this.wireClass(net, conflict), this.selected?.kind === 'wire' && this.selected.id === w.id ? 'ce-sel' : '']
+      const cls = ['ce-wire', this.wireClass(net, conflict), this.sel.wires.has(w.id) ? 'ce-sel' : '']
         .filter(Boolean).join(' ');
       const line = el('line', { x1: w.a.x * GRID, y1: w.a.y * GRID, x2: w.b.x * GRID, y2: w.b.y * GRID, class: cls, 'data-wire': w.id });
       g.append(line);
@@ -565,7 +612,7 @@ export class CircuitEditor {
     }
     // Components
     for (const c of this.circ.components) {
-      const cls = [bad.has(c.id) ? 'ce-bad' : warn.has(c.id) ? 'ce-warn' : '', this.selected?.kind === 'comp' && this.selected.id === c.id ? 'ce-sel' : ''];
+      const cls = [bad.has(c.id) ? 'ce-bad' : warn.has(c.id) ? 'ce-warn' : '', this.sel.comps.has(c.id) ? 'ce-sel' : ''];
       g.append(this.drawComp(c, cls.filter(Boolean).join(' ')));
     }
     // Wire preview / placing ghost
@@ -573,6 +620,11 @@ export class CircuitEditor {
       for (const [a, b] of lPath(this.drag.from, this.drag.to)) {
         g.append(el('line', { x1: a.x * GRID, y1: a.y * GRID, x2: b.x * GRID, y2: b.y * GRID, class: 'ce-wire ce-preview' }));
       }
+    }
+    if (this.drag?.kind === 'box') {
+      const { a, b } = this.drag;
+      g.append(el('rect', { x: Math.min(a.x, b.x) * GRID, y: Math.min(a.y, b.y) * GRID, width: Math.abs(a.x - b.x) * GRID,
+        height: Math.abs(a.y - b.y) * GRID, class: 'ce-box' }));
     }
     if (this.placing && this.mode === 'edit') {
       g.append(this.drawComp({ ...this.placing, x: this.hover.x, y: this.hover.y }, 'ce-ghost'));
