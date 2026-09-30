@@ -584,3 +584,9 @@ button[data-icon] { display: inline-flex; align-items: center; justify-content: 
 .ce-tools .btn-icon-only { width: 30px; }
 .ce-pal-btn:has(.ce-pal-ico) { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-start; padding: 0 8px; }
 .ce-pal-ico { flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.about-more summary { cursor: pointer; font-size: 0.8125rem; color: var(--hf-text-secondary); list-style: none; display: inline-flex; align-items: center; gap: 6px; user-select: none; }
+.about-more summary::-webkit-details-marker { display: none; }
+.about-more summary::before { content: '▸'; font-size: 0.75rem; transition: transform 0.15s; }
+.about-more[open] summary::before { transform: rotate(90deg); }
+.about-more summary:hover { color: var(--hf-text); }
+.about-more .about-stack { margin-top: 10px; }
