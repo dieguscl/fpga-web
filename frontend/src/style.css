@@ -389,11 +389,13 @@ main {
 .ce-comp.ce-warn .ce-body { stroke-dasharray: 4 3; }
 .ce-comp.ce-on .ce-body { fill: #1F6B50; stroke: #3DFF9E; }
 .ce-comp.ce-ghost { opacity: 0.55; pointer-events: none; }
-.ce-text { font-family: var(--font-display); font-weight: 700; font-size: 14px; fill: var(--hf-text); text-anchor: middle; pointer-events: none; }
+.ce-text { font-family: var(--font-display); font-weight: 700; font-size: 13px; fill: var(--hf-text); text-anchor: middle; pointer-events: none; }
 .ce-small { font-size: 10px; }
 .ce-value { font-family: var(--font-mono); font-size: 12px; }
-.ce-label { font-family: var(--font-mono); font-size: 11px; fill: var(--hf-text-muted); text-anchor: middle; pointer-events: none; }
-.ce-pin-name { font-family: var(--font-mono); font-size: 10px; fill: var(--hf-text-muted); pointer-events: none; }
+.ce-label { font-family: var(--font-mono); font-size: 12px; fill: var(--hf-text-secondary); text-anchor: middle; pointer-events: none; }
+.ce-pin-name { font-family: var(--font-mono); font-size: 11px; fill: var(--hf-text-secondary); pointer-events: none; }
+/* text inherits stroke from the part groups; an outline makes glyphs smear */
+.ce-canvas text { stroke: none; }
 .ce-right { text-anchor: start; }
 .ce-left { text-anchor: end; }
 .ce-label.ce-right { text-anchor: end; }

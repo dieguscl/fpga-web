@@ -5,6 +5,7 @@ import '@fontsource/inter/500.css';
 import '@fontsource/inter/600.css';
 import '@fontsource/inter/700.css';
 import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/700.css';
 import { ApiError, fetchBitstream, fetchNetlist, fetchWave, submitNetlist, submitSim, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent } from './api';
 import { Editor } from './editor';
 import { parseLocations } from './errors';
