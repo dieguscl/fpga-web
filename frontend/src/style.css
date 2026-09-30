@@ -563,3 +563,10 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 16px; }
 }
 .ce-invert { display: flex; gap: 10px; flex-wrap: wrap; }
 .ce-invert label { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; cursor: pointer; }
+.about p { margin: 0; color: var(--hf-text-secondary); font-size: 0.8125rem; line-height: 1.5; }
+.about-stack { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 0; font-size: 0.8125rem; }
+.about-stack dt { color: var(--hf-text-secondary); }
+.about-stack dd { margin: 0; }
+@media (max-width: 520px) { .about-stack { grid-template-columns: 1fr; } .about-stack dd { margin-bottom: 6px; } }
+#settings-dialog { max-width: min(560px, calc(100vw - 32px)); }
+#settings-dialog { max-height: calc(100vh - 32px); overflow: auto; }
