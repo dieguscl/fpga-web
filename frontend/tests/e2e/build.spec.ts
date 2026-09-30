@@ -56,3 +56,33 @@ test('basys3 pin planner: clear, auto-assign, build', async ({ page }) => {
   await page.click('#build');
   await expect(page.locator('#status')).toContainText('Build succeeded', { timeout: 150_000 });
 });
+
+test('simulate the basys3 example testbench and show the waveform', async ({ page }) => {
+  await page.goto('/');
+  await page.selectOption('#board', 'basys3');
+  page.once('dialog', (d) => d.accept('sim'));
+  await page.click('#new-project');
+  await expect(page.locator('#file-list')).toContainText('blinky_tb.v');
+  await expect(page.locator('#download')).toBeHidden();
+  await page.click('#simulate');
+  await expect(page.locator('#status')).toContainText('Simulation finished', { timeout: 60_000 });
+  await expect(page.locator('#wave')).toBeVisible();
+  await expect(page.locator('.wv-name-label')).toHaveText(['leds[15:0]', 'led_sim', 'led0', 'clk']);
+  const box = (await page.locator('.wv-canvas-wrap canvas').boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + 40);
+  await expect(page.locator('.wv-cursor-label')).toContainText('µs');
+  await page.click('#tab-code');
+  await expect(page.locator('.cm-content')).toBeVisible();
+});
+
+test('generate a testbench for a new top module', async ({ page }) => {
+  await page.goto('/');
+  await page.selectOption('#board', 'icebreaker');
+  page.once('dialog', (d) => d.accept('tbgen'));
+  await page.click('#new-project');
+  await page.click('#new-tb');
+  await expect(page.locator('#file-list')).toContainText('_tb.v');
+  await expect(page.locator('.cm-content')).toContainText('$dumpvars');
+  await page.click('#simulate');
+  await expect(page.locator('#status')).toContainText('Simulation finished', { timeout: 60_000 });
+});

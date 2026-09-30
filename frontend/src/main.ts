@@ -4,12 +4,15 @@ import '@fontsource/inter/400.css';
 import '@fontsource/inter/600.css';
 import '@fontsource/inter/700.css';
 import '@fontsource/jetbrains-mono/400.css';
-import { ApiError, fetchBitstream, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent } from './api';
+import { ApiError, fetchBitstream, fetchWave, submitSim, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent } from './api';
 import { Editor } from './editor';
 import { parseLocations } from './errors';
 import { applyStatic, getLang, LANGS, onLangChange, setLang, t, type Key, type Lang } from './i18n';
 import { PinPlanner } from './pinplanner';
 import { findModulePorts } from './verilog-ports';
+import { generateTestbench, testbenchName } from './tbgen';
+import { parseVcd } from './vcd';
+import { WaveformViewer } from './waveform';
 import { flash, webUsbSupported } from './flasher';
 import { exportZip, importZip, newProject, NAME_RE, ProjectStore, type Project } from './project';
 import { detectOS, setupHelpHtml } from './setup-help';
@@ -79,7 +82,7 @@ function boardInfo(id: string): BoardInfo | undefined {
 // own openProject() call lands afterwards. Playwright (and real users)
 // naturally wait for a control to become enabled before interacting with
 // it, so this serializes interaction after the bootstrap deterministically.
-const GATED_CONTROLS = ['board', 'new-project', 'project', 'import', 'export', 'add-file', 'build'];
+const GATED_CONTROLS = ['board', 'new-project', 'project', 'import', 'export', 'add-file', 'new-tb', 'build', 'simulate'];
 function setControlsReady(ready: boolean) {
   for (const id of GATED_CONTROLS) ($(id) as HTMLButtonElement | HTMLSelectElement).disabled = !ready;
 }
@@ -94,6 +97,7 @@ function setStatus(key: Key, vars: Record<string, string | number> = {}, kind: '
 }
 
 function renderFiles() {
+  refreshTestbenches();
   const ul = $('file-list');
   ul.replaceChildren();
   for (const name of Object.keys(project.files).sort()) {
@@ -134,12 +138,21 @@ function plannerApplies(name: string): boolean {
   return !!project && PLANNER_BOARDS.has(project.board) && /\.xdc$/i.test(name);
 }
 
+// Editor panel tabs: the code/planner view, or the last simulation's waveform.
+let mainTab: 'code' | 'wave' = 'code';
+const waveViewer = new WaveformViewer($('wave'));
+
 function showView() {
-  const usePlanner = plannerApplies(currentFile);
+  const wave = mainTab === 'wave' && !$('tab-wave').hidden;
+  $('wave').hidden = !wave;
+  $('tab-code').classList.toggle('active', !wave);
+  $('tab-wave').classList.toggle('active', wave);
+  const usePlanner = !wave && plannerApplies(currentFile);
   $('view-toggle').hidden = !usePlanner;
   const board = usePlanner && fileView === 'board';
   $('planner').hidden = !board;
-  $('editor').hidden = board;
+  $('editor').hidden = board || wave;
+  if (wave) return;
   $('view-board').classList.toggle('active', board);
   $('view-text').classList.toggle('active', !board);
   if (board) {
@@ -152,6 +165,7 @@ function showView() {
 
 function openFile(name: string) {
   currentFile = name;
+  mainTab = 'code';
   // No files left (name === ''): show an empty, read-only editor instead of
   // a writable "nameless" document that would silently create a `''` entry
   // in project.files the moment the user typed into it.
@@ -220,6 +234,7 @@ function resetOutput() {
   $('log').replaceChildren();
   $('summary').replaceChildren();
   $<HTMLButtonElement>('build').disabled = false;
+  $<HTMLButtonElement>('simulate').disabled = false;
   $<HTMLButtonElement>('flash').disabled = true;
   dl.hidden = true;
   lastBitstream = null;
@@ -255,7 +270,7 @@ function appendLog(line: string) {
   log.scrollTop = log.scrollHeight;
 }
 
-function renderSummary(ev: Extract<BuildEvent, { type: 'done' }>) {
+function renderSummary(ev: Extract<BuildEvent, { type: 'done'; bitstream: string }>) {
   // Metric chips built with textContent only (resource/clock names come from tool output).
   const chip = (cls: string, value: string, name: string) => {
     const el = document.createElement('div');
@@ -277,6 +292,11 @@ function renderSummary(ev: Extract<BuildEvent, { type: 'done' }>) {
   $('summary').replaceChildren(...chips);
 }
 
+function enableRun() {
+  $<HTMLButtonElement>('build').disabled = false;
+  $<HTMLButtonElement>('simulate').disabled = false;
+}
+
 async function build() {
   resetOutput(); // closes any previous stream and bumps buildGen
   const gen = buildGen; // this build's token: events checked against it below are dropped once stale
@@ -284,6 +304,7 @@ async function build() {
   project.top = $<HTMLInputElement>('top').value.trim();
   scheduleSave();
   $<HTMLButtonElement>('build').disabled = true;
+  $<HTMLButtonElement>('simulate').disabled = true;
   setStatus('status.submitting');
   try {
     const { job_id } = await submitBuild({ board: project.board, top: project.top, files: project.files, lint: $<HTMLInputElement>('lint').checked });
@@ -294,8 +315,8 @@ async function build() {
         if (ev.type === 'queued') setStatus('status.queued', { n: ev.position });
         else if (ev.type === 'step') { setStatus('status.running', { step: ev.name }); appendLog(`== ${ev.name}`); }
         else if (ev.type === 'log') appendLog(ev.line);
-        else if (ev.type === 'error') { setStatus('status.buildFailed', { msg: ev.message }, 'err'); $<HTMLButtonElement>('build').disabled = false; }
-        else if (ev.type === 'done') {
+        else if (ev.type === 'error') { setStatus('status.buildFailed', { msg: ev.message }, 'err'); enableRun(); }
+        else if (ev.type === 'done' && ev.kind !== 'sim') {
           renderSummary(ev);
           const data = await fetchBitstream(job_id);
           if (gen !== buildGen) return; // superseded while fetching the bitstream: never set lastBitstream/download/flash
@@ -306,7 +327,7 @@ async function build() {
           a.hidden = false;
           $<HTMLButtonElement>('flash').disabled = !(board.flash === 'browser' && webUsbSupported());
           setStatus('status.buildOk', {}, 'ok');
-          $<HTMLButtonElement>('build').disabled = false;
+          enableRun();
         }
       } catch (e) {
         // A failed bitstream fetch (or any other handler error) must not
@@ -314,14 +335,92 @@ async function build() {
         if (gen !== buildGen) return;
         const msg = e instanceof ApiError ? e.message : String((e as Error)?.message ?? e);
         setStatus('status.buildFailed', { msg }, 'err');
-        $<HTMLButtonElement>('build').disabled = false;
+        enableRun();
       }
     });
   } catch (e) {
     if (gen !== buildGen) return;
     const msg = e instanceof ApiError ? e.message : String(e);
     setStatus('status.buildFailed', { msg }, 'err');
+    enableRun();
+  }
+}
+
+function testbenches(): string[] {
+  return Object.keys(project?.files ?? {}).filter((n) => /_tb\.s?v$/.test(n)).sort();
+}
+
+function refreshTestbenches() {
+  const sel = $<HTMLSelectElement>('testbench');
+  const tbs = testbenches();
+  const keep = sel.value;
+  sel.replaceChildren(...tbs.map((n) => new Option(n, n, false, n === keep)));
+  if (!tbs.includes(keep) && tbs.length) sel.value = tbs[0];
+  sel.hidden = tbs.length < 2;
+  const btn = $<HTMLButtonElement>('simulate');
+  btn.title = tbs.length ? '' : t('sim.noTb');
+}
+
+function newTestbench() {
+  const top = $<HTMLInputElement>('top').value.trim() || project.top;
+  const name = testbenchName(top);
+  if (name in project.files) {
+    alert(t('tb.exists', { name }));
+    openFile(name);
+    return;
+  }
+  project.files[name] = generateTestbench(top, findModulePorts(project.files, top).ports);
+  scheduleSave();
+  openFile(name);
+}
+
+async function simulate() {
+  const tb = $<HTMLSelectElement>('testbench').value || testbenches()[0];
+  if (!tb) {
+    setStatus('sim.noTb', {}, 'err');
+    return;
+  }
+  resetOutput();
+  const gen = buildGen;
+  scheduleSave();
+  $<HTMLButtonElement>('build').disabled = true;
+  $<HTMLButtonElement>('simulate').disabled = true;
+  const done = () => {
     $<HTMLButtonElement>('build').disabled = false;
+    $<HTMLButtonElement>('simulate').disabled = false;
+  };
+  setStatus('status.submitting');
+  try {
+    const { job_id } = await submitSim({ board: project.board, testbench: tb, files: project.files });
+    if (gen !== buildGen) return;
+    closeStream = streamEvents(job_id, async (ev) => {
+      if (gen !== buildGen) return;
+      try {
+        if (ev.type === 'queued') setStatus('status.queued', { n: ev.position });
+        else if (ev.type === 'step') { setStatus('status.running', { step: ev.name }); appendLog(`== ${ev.name}`); }
+        else if (ev.type === 'log') appendLog(ev.line);
+        else if (ev.type === 'error') { setStatus('status.simFailed', { msg: ev.message }, 'err'); done(); }
+        else if (ev.type === 'done') {
+          const text = await fetchWave(job_id);
+          if (gen !== buildGen) return;
+          const vcd = parseVcd(text);
+          $('tab-wave').hidden = false;
+          mainTab = 'wave';
+          showView();
+          waveViewer.load(vcd, tb);
+          setStatus('status.simOk', {}, 'ok');
+          done();
+        }
+      } catch (e) {
+        if (gen !== buildGen) return;
+        setStatus('status.simFailed', { msg: e instanceof ApiError ? e.message : String((e as Error)?.message ?? e) }, 'err');
+        done();
+      }
+    });
+  } catch (e) {
+    if (gen !== buildGen) return;
+    setStatus('status.simFailed', { msg: e instanceof ApiError ? e.message : String(e) }, 'err');
+    done();
   }
 }
 
@@ -393,6 +492,10 @@ async function init() {
   $('flash').onclick = doFlash;
   $('help').onclick = showHelp;
   $('view-board').onclick = () => { fileView = 'board'; showView(); };
+  $('tab-code').onclick = () => { mainTab = 'code'; showView(); };
+  $('tab-wave').onclick = () => { mainTab = 'wave'; showView(); };
+  $('simulate').onclick = () => void simulate();
+  $('new-tb').onclick = newTestbench;
   $('view-text').onclick = () => { fileView = 'text'; showView(); };
   $('export').onclick = () => {
     const a = document.createElement('a');

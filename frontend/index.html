@@ -51,19 +51,29 @@
       <div class="panel-head"><span class="label" data-i18n="label.files">Files</span></div>
       <ul id="file-list"></ul>
       <button id="add-file" class="btn-ghost btn-block" disabled data-i18n="btn.newFile">+ New file</button>
+      <button id="new-tb" class="btn-ghost btn-block" disabled data-i18n="btn.newTb">+ Testbench</button>
     </aside>
     <section class="panel panel-editor">
-      <div id="view-toggle" class="view-toggle" hidden>
-        <button id="view-board" class="seg-btn active" data-i18n="view.board">Board</button>
-        <button id="view-text" class="seg-btn" data-i18n="view.text">Text</button>
+      <div class="editor-bar">
+        <div class="view-toggle">
+          <button id="tab-code" class="seg-btn active" data-i18n="tab.code">Code</button>
+          <button id="tab-wave" class="seg-btn" hidden data-i18n="tab.wave">Waveform</button>
+        </div>
+        <div id="view-toggle" class="view-toggle" hidden>
+          <button id="view-board" class="seg-btn active" data-i18n="view.board">Board</button>
+          <button id="view-text" class="seg-btn" data-i18n="view.text">Text</button>
+        </div>
       </div>
       <div id="editor"></div>
       <div id="planner" hidden></div>
+      <div id="wave" hidden></div>
     </section>
     <section id="output" class="panel panel-output">
       <div class="panel-head"><span class="label" data-i18n="label.output">Output</span></div>
       <div class="actions">
         <button id="build" class="btn-primary" disabled data-i18n="btn.build">Build</button>
+        <button id="simulate" class="btn-tertiary" disabled data-i18n="btn.simulate">Simulate</button>
+        <select id="testbench" class="tb-select" aria-label="Testbench" hidden></select>
         <button id="flash" class="btn-tertiary" disabled data-i18n="btn.flash">Flash</button>
         <a id="download" class="btn-ghost" hidden data-i18n="btn.download">Download</a>
         <span class="actions-gap"></span>
