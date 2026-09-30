@@ -100,19 +100,11 @@ def test_validate_sim_files():
         validate_sim_files("main_tb.v", {**files, "../x.v": ""})
 
 
-def test_typographic_quotes_in_code_are_reported_with_location():
-    from fpgaweb.validation import ValidationError, validate_sim_files
 
-    tb = "module t_tb;\n  // comment with ’ is fine\n  reg [1:0] s;\n  initial s = 2’b00; // “quoted”\nendmodule\n"
-    with pytest.raises(ValidationError) as e:
-        validate_sim_files("t_tb.v", {"t_tb.v": tb})
-    msg = str(e.value)
-    assert msg.startswith("t_tb.v:4:16: typographic character '’' (U+2019)")
-    assert "apostrophe" in msg
-
-
-def test_typographic_characters_only_in_comments_and_strings_are_fine():
+def test_typographic_quotes_are_converted():
     from fpgaweb.validation import validate_sim_files
 
-    tb = 'module t_tb;\n  /* “block” ’ */\n  initial $display("it’s ok – really"); // ’\nendmodule\n'
-    assert validate_sim_files("t_tb.v", {"t_tb.v": tb})
+    tb = "module t_tb;\n  reg [1:0] s;\n  initial s = 2\u2019b00; // \u201cquoted\u201d \u2013 x\nendmodule\n"
+    out = validate_sim_files("t_tb.v", {"t_tb.v": tb})
+    assert out["t_tb.v"] == "module t_tb;\n  reg [1:0] s;\n  initial s = 2'b00; // \"quoted\" - x\nendmodule\n"
+    assert "\u00e7" in validate_sim_files("t_tb.v", {"t_tb.v": "module t_tb; // a\u00e7\u00e3o\nendmodule\n"})["t_tb.v"]

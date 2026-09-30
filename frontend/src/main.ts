@@ -7,7 +7,7 @@ import '@fontsource/inter/700.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/700.css';
 import { ApiError, fetchBitstream, fetchNetlist, fetchWave, submitNetlist, submitSim, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent } from './api';
-import { Editor, vimEnabled } from './editor';
+import { Editor, plainQuotes, vimEnabled } from './editor';
 import { parseLocations } from './errors';
 import { applyTheme, getTheme, onThemeChange, setTheme, type ThemeChoice } from './theme';
 import { decorateIcons } from './icons';
@@ -204,6 +204,30 @@ function newCircuit() {
   openFile(file);
 }
 
+/** Replace typographic quotes/dashes (from code copied out of PDFs/Word) in HDL files; returns the changed files. */
+function fixTypography(p: Project): string[] {
+  const changed: string[] = [];
+  for (const [name, text] of Object.entries(p.files)) {
+    if (!/\.(sv|v|svh|vh)$/.test(name)) continue;
+    const fixed = plainQuotes(text);
+    if (fixed !== text) {
+      p.files[name] = fixed;
+      changed.push(name);
+    }
+  }
+  return changed;
+}
+
+/** Fix the open project before sending it to the server, and say so in the log. */
+function fixTypographyInProject(): void {
+  const before = currentFile ? project.files[currentFile] : undefined;
+  const changed = fixTypography(project);
+  if (!changed.length) return;
+  if (currentFile && changed.includes(currentFile) && before !== undefined) editor.replaceText(project.files[currentFile]);
+  scheduleSave();
+  appendLog(t('log.fixedQuotes', { files: changed.join(', ') }));
+}
+
 /** Files the server understands (drawn circuits are sent as their generated Verilog). */
 function sourceFiles(): Record<string, string> {
   return Object.fromEntries(Object.entries(project.files).filter(([n]) => !n.endsWith('.circ')));
@@ -216,6 +240,7 @@ const virtualBoard = new VirtualBoard($('vboard'), {
     const top = $<HTMLInputElement>('top').value.trim() || project.top;
     const xdcName = Object.keys(project.files).find((n) => n.endsWith('.xdc'));
     resetOutput();
+    fixTypographyInProject();
     const gen = buildGen;
     appendLog('== virtual board');
     const { job_id } = await submitNetlist({ board: project.board, top, files: sourceFiles(), speedup });
@@ -410,6 +435,7 @@ function enableRun() {
 
 async function build() {
   resetOutput(); // closes any previous stream and bumps buildGen
+  fixTypographyInProject();
   const gen = buildGen; // this build's token: events checked against it below are dropped once stale
   const board = boardInfo(project.board)!;
   project.top = $<HTMLInputElement>('top').value.trim();
@@ -493,6 +519,7 @@ async function simulate() {
     return;
   }
   resetOutput();
+  fixTypographyInProject();
   const gen = buildGen;
   scheduleSave();
   $<HTMLButtonElement>('build').disabled = true;
@@ -627,9 +654,11 @@ async function init() {
     try {
       const p = importZip(new Uint8Array(await f.arrayBuffer()));
       if (!boardInfo(p.board)) throw new Error(t('err.unknownBoard', { board: p.board }));
+      const fixed = fixTypography(p);
       projectGen++;
       await store.save(p);
       await openProject(p);
+      if (fixed.length) appendLog(t('log.fixedQuotes', { files: fixed.join(', ') }));
     } catch (err) {
       alert(t('alert.importFailed', { msg: (err as Error).message }));
     }

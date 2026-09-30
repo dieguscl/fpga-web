@@ -32,61 +32,19 @@ def is_testbench(name: str) -> bool:
 
 
 # Characters that sneak in when code is copied from PDFs, Word or slides and
-# make the tools fail with a bare "syntax error".
+# make the tools fail with a bare "syntax error"; they are converted, not rejected.
 LOOKALIKES = {
     "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u2032": "'", "\u00b4": "'",
     "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u2033": '"',
     "\u2013": "-", "\u2014": "-", "\u2212": "-", "\u00a0": " ", "\u200b": "",
 }
-_LOOKALIKE_RE = re.compile("[" + "".join(k for k in LOOKALIKES if len(k) == 1) + "]")
+_LOOKALIKE_TABLE = str.maketrans(LOOKALIKES)
 HDL_EXTS = DESIGN_EXTS | {".vh", ".svh"}
 
 
-def _code_only(text: str) -> str:
-    """Blank out comments and string literals (keeping newlines) so only code is checked."""
-    out = []
-    i, n = 0, len(text)
-    while i < n:
-        c = text[i]
-        if text.startswith("//", i):
-            j = text.find("\n", i)
-            j = n if j < 0 else j
-            out.append(" " * (j - i))
-            i = j
-        elif text.startswith("/*", i):
-            j = text.find("*/", i + 2)
-            j = n if j < 0 else j + 2
-            out.append("".join(ch if ch == "\n" else " " for ch in text[i:j]))
-            i = j
-        elif c == '"':
-            j = i + 1
-            while j < n and text[j] not in '"\n':
-                j += 2 if text[j] == "\\" else 1
-            j = min(j + 1, n)
-            out.append(" " * (j - i))
-            i = j
-        else:
-            out.append(c)
-            i += 1
-    return "".join(out)
-
-
-def check_lookalikes(name: str, text: str) -> None:
-    """Reject typographic quotes/dashes in HDL code with a message pointing at the line."""
-    m = _LOOKALIKE_RE.search(_code_only(text))
-    if not m:
-        return
-    ch = m.group()
-    line = text.count("\n", 0, m.start()) + 1
-    col = m.start() - (text.rfind("\n", 0, m.start()) + 1) + 1
-    plain = LOOKALIKES[ch]
-    what = {"'": "apostrophe ' (e.g. 4'b0000)", '"': 'double quote "', "-": "minus/hyphen -", " ": "space", "": "nothing (delete it)"}[plain]
-    count = len(_LOOKALIKE_RE.findall(_code_only(text)))
-    more = f" ({count} such characters in this file)" if count > 1 else ""
-    raise ValidationError(
-        f"{name}:{line}:{col}: typographic character {ch!r} (U+{ord(ch):04X}) must be a plain {what}{more}; "
-        "this usually comes from copying code out of a PDF, Word or slides"
-    )
+def fix_lookalikes(text: str) -> str:
+    """Convert typographic quotes/dashes to their ASCII forms (same as the editor's paste filter)."""
+    return text.translate(_LOOKALIKE_TABLE)
 
 
 def _normalise(text: str) -> str:
@@ -119,7 +77,7 @@ def _check_files(files: dict[str, str]) -> dict[str, str]:
             raise ValidationError(f"{name} is not valid UTF-8")
         out[name] = _normalise(text)
         if ext in HDL_EXTS:
-            check_lookalikes(name, out[name])
+            out[name] = fix_lookalikes(out[name])
     if total > MAX_TOTAL_BYTES:
         raise ValidationError("project is larger than 1 MB")
     return out

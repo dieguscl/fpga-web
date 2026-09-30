@@ -84,6 +84,11 @@ export class Editor {
   setDoc(_name: string, text: string, readOnly = false): void {
     this.view.setState(this.state(text, readOnly));
   }
+  /** Replace the whole text as one undoable edit (keeps history, unlike setDoc). */
+  replaceText(text: string): void {
+    const doc = this.view.state.doc;
+    if (doc.toString() !== text) this.view.dispatch({ changes: { from: 0, to: doc.length, insert: text } });
+  }
   /** Toggle Vim keybindings (remembered in this browser). */
   setVim(on: boolean): void {
     this.vim = on;
