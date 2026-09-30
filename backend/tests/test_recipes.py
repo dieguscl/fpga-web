@@ -125,7 +125,7 @@ def test_lint_gowin(registry, settings):
 
 
 def test_plan_sim_uses_chosen_testbench_and_cell_library(registry, settings):
-    from fpgaweb.recipes import plan_sim
+    from fpgaweb.recipes import SIM_CMDFILE, plan_sim
     files = {"main.v": "module main(input clk); endmodule", "a_tb.v": "module a_tb; initial $dumpvars(0, a_tb); endmodule",
              "b_tb.v": "module b_tb; endmodule", "p.pcf": ""}
     p = plan_sim(registry.get("icebreaker"), "a_tb.v", files, settings)
@@ -136,7 +136,8 @@ def test_plan_sim_uses_chosen_testbench_and_cell_library(registry, settings):
     assert a[a.index("-s") + 1] == "a_tb"
     assert a[a.index("-l") + 1] == str(settings.yosys_share / "ice40" / "cells_sim.v")
     assert "a_tb.v" in a and "main.v" in a and "b_tb.v" not in a
-    assert p.extra_files == {}
+    assert a[a.index("-c") + 1] == SIM_CMDFILE  # default `timescale 1ns/1ps, like Vivado
+    assert p.extra_files == {SIM_CMDFILE: "+timescale+1ns/1ps\n"}
 
 
 def test_plan_sim_adds_dump_module_when_testbench_has_no_dumpvars(registry, settings):

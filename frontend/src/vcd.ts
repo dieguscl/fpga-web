@@ -181,3 +181,27 @@ export function formatTime(t: number, secondsPerUnit: number): string {
   }
   return `${t}`;
 }
+
+/**
+ * One single-bit signal per bit of a bus, MSB first (as Vivado expands a bus).
+ * Names use the declared range, e.g. "D[3:0]" → D[3], D[2], D[1], D[0].
+ */
+export function bitSignals(s: VcdSignal): VcdSignal[] {
+  if (s.width <= 1 || s.kind === 'real') return [];
+  const m = /^(.*)\[(-?\d+):(-?\d+)\]$/.exec(s.name);
+  const base = m ? m[1] : s.name;
+  const msb = m ? Number(m[2]) : s.width - 1;
+  const lsb = m ? Number(m[3]) : 0;
+  const step = msb >= lsb ? -1 : 1;
+  return Array.from({ length: s.width }, (_, j) => {
+    const idx = msb + step * j;
+    const changes: Changes = { t: [], v: [] };
+    s.changes.t.forEach((t, i) => {
+      const ch = extend(s.changes.v[i], s.width)[j];
+      if (changes.v.length && changes.v[changes.v.length - 1] === ch) return;
+      changes.t.push(t);
+      changes.v.push(ch);
+    });
+    return { key: `${s.key}#${idx}`, name: `${base}[${idx}]`, scope: s.scope, width: 1, kind: s.kind, changes };
+  });
+}

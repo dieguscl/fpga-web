@@ -135,6 +135,9 @@ def testbench_module(text: str) -> str:
     return m.group(1)
 
 
+SIM_CMDFILE = "sim_timescale.cmd"
+
+
 def plan_sim(board: Board, testbench: str, files: dict[str, str], settings: Settings) -> BuildPlan:
     """iverilog compile + vvp run. Other testbenches are left out; the board's
     simulation cell library is passed as a library (-l) so vendor primitives
@@ -156,8 +159,11 @@ def plan_sim(board: Board, testbench: str, files: dict[str, str], settings: Sett
     if board.arch == "ice40":
         defines.append("-DNO_ICE40_DEFAULT_ASSIGNMENTS")
     cells = str(settings.yosys_share / board.arch / "cells_sim.v")
+    # Files without `timescale default to 1ns/1ps, like Vivado's simulator
+    # (iverilog would otherwise use 1s units, so #50 means 50 seconds).
+    extra[SIM_CMDFILE] = "+timescale+1ns/1ps\n"
     steps = [
-        Step("compile", ["iverilog", "-g2012", *defines, "-I.", "-o", "sim.vvp", *roots, "-l", cells, *srcs]),
+        Step("compile", ["iverilog", "-g2012", "-c", SIM_CMDFILE, *defines, "-I.", "-o", "sim.vvp", *roots, "-l", cells, *srcs]),
         Step("simulate", ["vvp", "-n", "sim.vvp"]),
     ]
     return BuildPlan(steps=steps, extra_files=extra, output="")

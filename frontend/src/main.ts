@@ -494,7 +494,7 @@ function refreshTestbenches() {
   const keep = sel.value;
   sel.replaceChildren(...tbs.map((n) => new Option(n, n, false, n === keep)));
   if (!tbs.includes(keep) && tbs.length) sel.value = tbs[0];
-  sel.hidden = tbs.length < 2;
+  sel.hidden = tbs.length === 0; // always show which testbench Simulate runs
   const btn = $<HTMLButtonElement>('simulate');
   btn.title = tbs.length ? '' : t('sim.noTb');
 }

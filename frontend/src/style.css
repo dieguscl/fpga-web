@@ -294,7 +294,7 @@ main {
 .wv-pick:hover { background: var(--hf-hover); }
 .wv-pick span:first-of-type { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wv-pick-width { color: var(--hf-text-muted); }
-.wv-main { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: minmax(180px, 30%) minmax(0, 1fr); margin: 0 14px 14px; background: var(--hf-surface-dim); }
+.wv-main { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: minmax(250px, 34%) minmax(0, 1fr); margin: 0 14px 14px; background: var(--hf-surface-dim); }
 .wv-names { background: var(--hf-surface-container-low); }
 .wv-names-head { position: sticky; top: 0; }
 .wv-name { display: flex; align-items: center; gap: 6px; padding: 0 6px 0 10px; border-bottom: 1px solid var(--hf-outline-ghost); }
@@ -596,3 +596,8 @@ button[data-icon] { display: inline-flex; align-items: center; justify-content: 
 .cm-vim-panel { padding: 2px 8px; font-family: var(--font-mono); font-size: 0.75rem; background: var(--hf-surface-container-high); color: var(--hf-text-secondary); }
 .cm-vim-panel input, .cm-vim-panel input:focus { height: auto; padding: 0; border: 0; outline: none; background: transparent; font: inherit; color: var(--hf-text); }
 .cm-fat-cursor { background: color-mix(in srgb, var(--hf-primary) 55%, transparent) !important; color: inherit !important; }
+.wv-expand { width: 14px; flex: none; padding: 0; border: 0; background: none; color: var(--hf-text-secondary); font-size: 0.75rem; line-height: 1; cursor: pointer; }
+.wv-expand:disabled { visibility: hidden; cursor: default; opacity: 1; }
+.wv-expand:hover:not(:disabled) { color: var(--hf-primary); }
+.wv-bit { padding-left: 26px; background: color-mix(in srgb, var(--hf-surface-container-high) 60%, transparent); }
+.wv-bit .wv-name-label { color: var(--hf-text-secondary); }

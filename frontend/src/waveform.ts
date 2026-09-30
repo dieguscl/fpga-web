@@ -6,7 +6,7 @@
 
 import { iconButton } from './icons';
 import { t } from './i18n';
-import { changeIndexAt, formatTime, formatValue, valueAt, type Radix, type Vcd, type VcdSignal } from './vcd';
+import { bitSignals, changeIndexAt, formatTime, formatValue, valueAt, type Radix, type Vcd, type VcdSignal } from './vcd';
 
 const ROW = 28;
 const RULER = 26;
@@ -19,6 +19,8 @@ interface Colors {
 export class WaveformViewer {
   private vcd: Vcd | null = null;
   private shown: VcdSignal[] = [];
+  private expanded = new Set<string>(); // bus keys shown with one row per bit
+  private bitCache = new Map<string, VcdSignal[]>();
   private radix = new Map<string, Radix>();
   private t0 = 0;
   private scale = 1; // px per time unit
@@ -75,6 +77,8 @@ export class WaveformViewer {
     this.vcd = vcd;
     const top = vcd.signals.filter((s) => s.scope.length <= 1 && s.kind !== 'parameter');
     this.shown = (top.length ? top : vcd.signals).slice(0, MAX_DEFAULT);
+    this.expanded.clear();
+    this.bitCache.clear();
     this.cursor = null;
     this.titleEl.textContent = title;
     this.rangeEl.textContent = `0 – ${formatTime(vcd.endTime, vcd.timescaleSeconds)}`;
@@ -184,18 +188,41 @@ export class WaveformViewer {
     this.pickList.replaceChildren(...rows);
   }
 
+  private bits(s: VcdSignal): VcdSignal[] {
+    let b = this.bitCache.get(s.key);
+    if (!b) this.bitCache.set(s.key, (b = bitSignals(s)));
+    return b;
+  }
+
+  /** Rows on screen: each shown signal, followed by its bits when the bus is expanded. */
+  private rows(): { s: VcdSignal; bit: boolean }[] {
+    return this.shown.flatMap((s) => [{ s, bit: false }, ...(this.expanded.has(s.key) ? this.bits(s).map((b) => ({ s: b, bit: true })) : [])]);
+  }
+
   private renderNames(): void {
     const spacer = el('div', 'wv-names-head');
     spacer.style.height = `${RULER}px`;
-    const rows = this.shown.map((s) => {
-      const row = el('div', 'wv-name');
+    const rows = this.rows().map(({ s, bit }) => {
+      const row = el('div', bit ? 'wv-name wv-bit' : 'wv-name');
       row.style.height = `${ROW}px`;
+      const canExpand = !bit && s.width > 1 && s.kind !== 'real';
+      const tog = document.createElement('button');
+      tog.className = 'wv-expand';
+      if (canExpand) {
+        const open = this.expanded.has(s.key);
+        tog.textContent = open ? '▾' : '▸';
+        tog.title = t(open ? 'wv.collapse' : 'wv.expand');
+        tog.setAttribute('aria-expanded', String(open));
+        tog.onclick = () => this.toggleExpand(s);
+      } else tog.disabled = true;
       const label = el('span', 'wv-name-label');
       label.textContent = s.scope.length > 1 ? `${s.scope.slice(1).join('.')}.${s.name}` : s.name;
-      label.title = s.key;
+      label.title = s.key.replace(/#\d+$/, '');
+      if (canExpand) label.ondblclick = () => this.toggleExpand(s);
       const val = el('span', 'wv-name-value');
       val.dataset.key = s.key;
-      row.append(label, val);
+      row.append(tog, label, val);
+      if (bit) return row;
       if (s.width > 1 && s.kind !== 'real') {
         const sel = document.createElement('select');
         for (const r of ['hex', 'dec', 'sdec', 'bin'] as Radix[]) sel.append(new Option(r, r));
@@ -213,6 +240,7 @@ export class WaveformViewer {
       rm.title = t('wv.remove');
       rm.onclick = () => {
         this.shown = this.shown.filter((x) => x !== s);
+        this.expanded.delete(s.key);
         this.renderNames();
         this.draw();
         if (!this.picker.hidden) this.renderPicker();
@@ -224,10 +252,17 @@ export class WaveformViewer {
     this.renderValues();
   }
 
+  private toggleExpand(s: VcdSignal): void {
+    if (this.expanded.has(s.key)) this.expanded.delete(s.key);
+    else this.expanded.add(s.key);
+    this.renderNames();
+    this.draw();
+  }
+
   private renderValues(): void {
     if (!this.vcd) return;
     this.cursorEl.textContent = this.cursor === null ? t('wv.clickHint') : `⌖ ${formatTime(this.cursor, this.vcd.timescaleSeconds)}`;
-    const byKey = new Map(this.shown.map((s) => [s.key, s]));
+    const byKey = new Map(this.rows().map(({ s }) => [s.key, s]));
     this.names.querySelectorAll<HTMLElement>('.wv-name-value').forEach((v) => {
       const s = byKey.get(v.dataset.key!);
       v.textContent = s && this.cursor !== null ? formatValue(valueAt(s, this.cursor), this.radix.get(s.key) ?? 'hex', s.kind) : '';
@@ -247,7 +282,8 @@ export class WaveformViewer {
 
   private draw(): void {
     const w = this.wrap.clientWidth;
-    const h = RULER + this.shown.length * ROW + 4;
+    const rows = this.rows();
+    const h = RULER + rows.length * ROW + 4;
     const dpr = window.devicePixelRatio || 1;
     if (this.canvas.width !== Math.round(w * dpr) || this.canvas.height !== Math.round(h * dpr)) {
       this.canvas.width = Math.round(w * dpr);
@@ -282,7 +318,7 @@ export class WaveformViewer {
       ctx.fillText(formatTime(tt, this.vcd.timescaleSeconds), x + 4, RULER / 2);
     }
 
-    this.shown.forEach((s, row) => this.drawSignal(s, RULER + row * ROW, w, c));
+    rows.forEach(({ s }, row) => this.drawSignal(s, RULER + row * ROW, w, c));
 
     if (this.cursor !== null) {
       const x = Math.round((this.cursor - this.t0) * this.scale) + 0.5;

@@ -68,6 +68,12 @@ test('simulate the basys3 example testbench and show the waveform', async ({ pag
   await expect(page.locator('#status')).toContainText('Simulation finished', { timeout: 60_000 });
   await expect(page.locator('#wave')).toBeVisible();
   await expect(page.locator('.wv-name-label')).toHaveText(['leds[15:0]', 'led_sim', 'led0', 'clk']);
+  // expand a bus into its bits (like Vivado), then collapse it again
+  await page.locator('.wv-name', { hasText: 'leds[15:0]' }).locator('.wv-expand').click();
+  await expect(page.locator('.wv-bit .wv-name-label')).toHaveCount(16);
+  await expect(page.locator('.wv-bit .wv-name-label').first()).toHaveText('leds[15]');
+  await page.locator('.wv-name', { hasText: 'leds[15:0]' }).locator('.wv-expand').click();
+  await expect(page.locator('.wv-bit')).toHaveCount(0);
   const box = (await page.locator('.wv-canvas-wrap canvas').boundingBox())!;
   await page.mouse.click(box.x + box.width / 2, box.y + 40);
   await expect(page.locator('.wv-cursor-label')).toContainText('µs');
