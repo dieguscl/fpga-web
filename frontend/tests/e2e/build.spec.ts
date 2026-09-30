@@ -127,6 +127,24 @@ test('draw a circuit, get Verilog, run it live', async ({ page }) => {
   await expect(page.locator('.ce-comp.ce-sel')).toHaveCount(2);
   await wire(3, 3, 3, 1);
   await expect(page.locator('.ce-problem')).toHaveCount(0);
+  // click a wire (near its end) selects it instead of starting a new wire
+  const q = at(13.7, 4); // close to the wire's end at the output pin
+  await page.mouse.click(q.x, q.y);
+  await expect(page.locator('line.ce-wire.ce-sel')).toHaveCount(1);
+  await page.keyboard.press('Delete');
+  await expect(page.locator('.ce-problem')).not.toHaveCount(0);
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.ce-problem')).toHaveCount(0);
+  // copy everything and paste it below at the mouse: a second, fully wired copy
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Control+c');
+  const dst = at(2, 12);
+  await page.mouse.move(dst.x, dst.y);
+  await page.keyboard.press('Control+v');
+  await expect(page.locator('.ce-comp')).toHaveCount(8);
+  await expect(page.locator('.ce-problem')).toHaveCount(0);
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.ce-comp')).toHaveCount(4);
   await page.locator('#file-list li', { hasText: 'gates.v' }).click();
   await expect(page.locator('.cm-content')).toContainText('assign out0 = in0 & in1;');
   await page.locator('#file-list li', { hasText: 'gates.circ' }).click();

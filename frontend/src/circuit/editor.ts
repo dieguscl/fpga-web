@@ -8,7 +8,10 @@ import {
   type Circuit, type Comp, type CompType, type Pt, type Rot, type SubInterface, type Wire,
 } from './model';
 import { buildNetlist, type Net, type Netlist } from './netlist';
-import { boxSelect, emptySelection, moveSelection, wireEndAt, type Selection } from './edit-ops';
+import { boxSelect, clipOrigin, copySelection, emptySelection, moveSelection, pasteClip, wireEndAt, type Clip, type Selection } from './edit-ops';
+
+// Shared by every editor on the page, so parts can be pasted into another circuit.
+let clipboard: Clip | null = null;
 import { CircuitSim, subInterfaces } from './sim';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -37,6 +40,7 @@ const SYMBOL: Partial<Record<CompType, string>> = {
 type Drag =
   | { kind: 'move'; start: Pt; orig: Circuit; snapshot: string; moved: boolean }
   | { kind: 'wire'; from: Pt; to: Pt }
+  | { kind: 'press'; from: Pt; sx: number; sy: number; target: { kind: 'comp' | 'wire'; id: string } | null; shift: boolean }
   | { kind: 'box'; a: Pt; b: Pt; add: boolean }
   | { kind: 'pan'; sx: number; sy: number; ox: number; oy: number };
 
@@ -60,6 +64,7 @@ export class CircuitEditor {
   private timer: number | null = null;
   private view = { x: 20, y: 20, k: 1 };
   private hover: Pt = { x: 0, y: 0 };
+  private pointerInside = false;
   private subs = new Map<string, SubInterface>();
   private netlist: Netlist | null = null;
 
@@ -91,6 +96,8 @@ export class CircuitEditor {
       button('ce.redo', () => this.doRedo(), 'btn-ghost'),
       button('ce.rotate', () => this.rotateSelected(), 'btn-ghost'),
       button('ce.delete', () => this.deleteSelected(), 'btn-ghost'),
+      button('ce.copy', () => this.copy(), 'btn-ghost'),
+      button('ce.paste', () => this.paste(false), 'btn-ghost'),
     );
     this.simTools = div('ce-tools');
     this.runBtn = button('ce.run', () => this.toggleRun(), 'btn-primary');
@@ -213,6 +220,27 @@ export class CircuitEditor {
       this.circ.wires = this.circ.wires.filter((w) => !s.wires.has(w.id));
       this.sel = emptySelection();
     });
+  }
+
+  private copy(): boolean {
+    if (!this.sel.comps.size && !this.sel.wires.size) return false;
+    clipboard = copySelection(this.circ, this.sel);
+    return true;
+  }
+
+  /** Paste at the mouse (atMouse) or offset from the original position. */
+  private paste(atMouse: boolean): void {
+    if (!clipboard || (!clipboard.components.length && !clipboard.wires.length)) return;
+    const o = clipOrigin(clipboard);
+    const dx = atMouse ? this.hover.x - o.x : 2, dy = atMouse ? this.hover.y - o.y : 2;
+    const clip = clipboard;
+    this.commit(() => {
+      const r = pasteClip(this.circ, clip, dx, dy);
+      this.circ = r.circ;
+      this.sel = r.sel;
+    });
+    if (!atMouse) clipboard = copySelection(this.circ, this.sel); // repeated pastes keep stepping
+    this.svg.focus();
   }
 
   /** The single selected component (properties panel), if exactly one part is selected. */
@@ -356,8 +384,9 @@ export class CircuitEditor {
       const compId = el0.closest('[data-comp]')?.getAttribute('data-comp') ?? null;
       const wireId = el0.closest('[data-wire]')?.getAttribute('data-wire') ?? null;
       if (onPin || (wireId && wireEndAt(this.circ, g) && !this.sel.wires.has(wireId))) {
-        // Digital-style: wires start from a pin or from an existing wire end.
-        this.drag = { kind: 'wire', from: g, to: g };
+        // Digital-style: dragging from a pin or a wire end draws a new wire; a plain click selects.
+        const target = wireId && !onPin ? { kind: 'wire' as const, id: wireId } : compId ? { kind: 'comp' as const, id: compId } : null;
+        this.drag = { kind: 'press', from: g, sx: e.clientX, sy: e.clientY, target, shift: e.shiftKey };
       } else if (compId || wireId) {
         const kind = compId ? 'comp' : 'wire';
         const id = (compId ?? wireId)!;
@@ -376,7 +405,10 @@ export class CircuitEditor {
       this.render();
     });
 
+    this.svg.addEventListener('pointerenter', () => (this.pointerInside = true));
+    this.svg.addEventListener('pointerleave', () => (this.pointerInside = false));
     this.svg.addEventListener('pointermove', (e) => {
+      this.pointerInside = true;
       const g = this.toGrid(e);
       this.hover = g;
       const d = this.drag;
@@ -395,6 +427,12 @@ export class CircuitEditor {
       }
       if (d?.kind === 'box') {
         d.b = this.toGridF(e);
+        this.render();
+        return;
+      }
+      if (d?.kind === 'press') {
+        if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 4) return;
+        this.drag = { kind: 'wire', from: d.from, to: g };
         this.render();
         return;
       }
@@ -419,6 +457,13 @@ export class CircuitEditor {
         const ids = new Set(this.circ.wires.map((w) => w.id));
         for (const id of [...this.sel.wires]) if (!ids.has(id)) this.sel.wires.delete(id);
         this.cb.onChange(structuredClone(this.circ));
+      }
+      if (d?.kind === 'press' && d.target) {
+        const set = d.target.kind === 'comp' ? this.sel.comps : this.sel.wires;
+        if (d.shift) {
+          if (set.has(d.target.id)) set.delete(d.target.id);
+          else set.add(d.target.id);
+        } else this.selectOnly(d.target.kind, d.target.id);
       }
       if (d?.kind === 'box') {
         const picked = boxSelect(this.circ, d.a, d.b, this.subs);
@@ -445,6 +490,10 @@ export class CircuitEditor {
       const mod = e.ctrlKey || e.metaKey;
       if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); this.deleteSelected(); }
       else if (e.key === 'r' || e.key === 'R') this.rotateSelected();
+      else if (mod && e.key.toLowerCase() === 'c') { if (this.copy()) e.preventDefault(); }
+      else if (mod && e.key.toLowerCase() === 'x') { if (this.copy()) { e.preventDefault(); this.deleteSelected(); } }
+      else if (mod && e.key.toLowerCase() === 'v') { e.preventDefault(); this.paste(this.pointerInside); }
+      else if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); if (this.copy()) this.paste(false); }
       else if (mod && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         this.sel = { comps: new Set(this.circ.components.map((c) => c.id)), wires: new Set(this.circ.wires.map((w) => w.id)) };

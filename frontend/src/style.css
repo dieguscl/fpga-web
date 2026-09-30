@@ -343,8 +343,8 @@ main {
 /* SVG parts */
 .ce-wire { stroke: var(--hf-text-secondary); stroke-width: 2; stroke-linecap: square; }
 .ce-wire.ce-bus { stroke: var(--hf-tertiary); stroke-width: 3.5; }
-.ce-wire-hit { stroke: transparent; stroke-width: 12; cursor: pointer; }
-.ce-wire.ce-sel { stroke: #F7C66B; }
+.ce-wire-hit { stroke: transparent; stroke-width: 14; cursor: pointer; }
+.ce-wire.ce-sel { stroke: #F7C66B !important; stroke-width: 3.5; filter: drop-shadow(0 0 3px rgba(247, 198, 107, 0.6)); }
 .ce-wire.ce-preview { stroke: var(--hf-primary); stroke-dasharray: 5 4; }
 .ce-junction { fill: var(--hf-text-secondary); }
 .ce-v-1 { stroke: #3DFF9E !important; fill: #3DFF9E; }

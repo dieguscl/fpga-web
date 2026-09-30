@@ -85,3 +85,62 @@ export function moveSelection(orig: Circuit, sel: Selection, dx: number, dy: num
 export function wireEndAt(circ: Circuit, p: Pt): boolean {
   return circ.wires.some((w) => (w.a.x === p.x && w.a.y === p.y) || (w.b.x === p.x && w.b.y === p.y));
 }
+
+// ── Copy / paste ──
+export interface Clip {
+  components: Comp[];
+  wires: Wire[];
+}
+
+export function copySelection(circ: Circuit, sel: Selection): Clip {
+  return structuredClone({
+    components: circ.components.filter((c) => sel.comps.has(c.id)),
+    wires: circ.wires.filter((w) => sel.wires.has(w.id)),
+  });
+}
+
+/** Top-left grid point of a clip (component origins and wire ends). */
+export function clipOrigin(clip: Clip): Pt {
+  const pts = [...clip.components.map((c) => ({ x: c.x, y: c.y })), ...clip.wires.flatMap((w) => [w.a, w.b])];
+  return pts.length ? { x: Math.min(...pts.map((p) => p.x)), y: Math.min(...pts.map((p) => p.y)) } : { x: 0, y: 0 };
+}
+
+/**
+ * Paste a clip shifted by (dx, dy): fresh ids, and labels of ports (in/out/clock)
+ * renumbered when they would clash, so the module's ports stay unique.
+ */
+export function pasteClip(circ: Circuit, clip: Clip, dx: number, dy: number): { circ: Circuit; sel: Selection } {
+  const ids = new Set([...circ.components.map((c) => c.id), ...circ.wires.map((w) => w.id)]);
+  const fresh = (prefix: string) => {
+    let i = 1;
+    while (ids.has(`${prefix}${i}`)) i++;
+    ids.add(`${prefix}${i}`);
+    return `${prefix}${i}`;
+  };
+  const labels = new Set(circ.components.map((c) => c.props.label).filter(Boolean));
+  const uniqueLabel = (label: string) => {
+    if (!labels.has(label)) {
+      labels.add(label);
+      return label;
+    }
+    const base = label.replace(/\d+$/, '') || 'p';
+    let i = 0;
+    while (labels.has(`${base}${i}`)) i++;
+    labels.add(`${base}${i}`);
+    return `${base}${i}`;
+  };
+  const sel = emptySelection();
+  const components = clip.components.map((c) => {
+    const id = fresh('c');
+    sel.comps.add(id);
+    const props = { ...c.props };
+    if (props.label && (c.type === 'in' || c.type === 'out' || c.type === 'clock')) props.label = uniqueLabel(props.label);
+    return { ...c, id, x: c.x + dx, y: c.y + dy, props };
+  });
+  const wires = clip.wires.map((w) => {
+    const id = fresh('w');
+    sel.wires.add(id);
+    return { id, a: { x: w.a.x + dx, y: w.a.y + dy }, b: { x: w.b.x + dx, y: w.b.y + dy } };
+  });
+  return { circ: { ...circ, components: [...circ.components, ...components], wires: [...circ.wires, ...wires] }, sel };
+}

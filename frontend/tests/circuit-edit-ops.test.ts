@@ -50,3 +50,20 @@ describe('moveSelection', () => {
     expect(back.wires).toEqual(AND_CIRCUIT.wires);
   });
 });
+
+describe('copy / paste', () => {
+  it('pastes shifted copies with fresh ids and unique port labels, and they work', async () => {
+    const { copySelection, pasteClip, clipOrigin } = await import('../src/circuit/edit-ops');
+    const all = { comps: new Set(AND_CIRCUIT.components.map((c) => c.id)), wires: new Set(AND_CIRCUIT.wires.map((w) => w.id)) };
+    const clip = copySelection(AND_CIRCUIT, all);
+    expect(clipOrigin(clip)).toEqual({ x: 0, y: 0 });
+    const { circ, sel } = pasteClip(AND_CIRCUIT, clip, 0, 10);
+    expect(circ.components).toHaveLength(8);
+    expect(circ.wires).toHaveLength(10);
+    expect(sel.comps.size).toBe(4);
+    expect(new Set([...circ.components.map((c) => c.id), ...circ.wires.map((w) => w.id)]).size).toBe(18);
+    const labels = circ.components.map((c) => c.props.label).filter(Boolean);
+    expect(new Set(labels).size).toBe(labels.length); // a, b, y + renamed copies
+    expect(buildNetlist(circ).problems).toEqual([]); // the copy is wired correctly and separate
+  });
+});
