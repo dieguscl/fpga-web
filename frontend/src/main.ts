@@ -14,6 +14,10 @@ import { findModulePorts } from './verilog-ports';
 import { generateTestbench, testbenchName } from './tbgen';
 import { parseVcd } from './vcd';
 import { WaveformViewer } from './waveform';
+import { CircuitEditor } from './circuit/editor';
+import { emptyCircuit, parseCircuit, serializeCircuit, type Circuit } from './circuit/model';
+import { subInterfaces } from './circuit/sim';
+import { generateVerilog } from './circuit/verilog';
 import { flash, webUsbSupported } from './flasher';
 import { exportZip, importZip, newProject, NAME_RE, ProjectStore, type Project } from './project';
 import { detectOS, setupHelpHtml } from './setup-help';
@@ -83,7 +87,7 @@ function boardInfo(id: string): BoardInfo | undefined {
 // own openProject() call lands afterwards. Playwright (and real users)
 // naturally wait for a control to become enabled before interacting with
 // it, so this serializes interaction after the bootstrap deterministically.
-const GATED_CONTROLS = ['board', 'new-project', 'project', 'import', 'export', 'add-file', 'new-tb', 'build', 'simulate'];
+const GATED_CONTROLS = ['board', 'new-project', 'project', 'import', 'export', 'add-file', 'new-tb', 'new-circuit', 'build', 'simulate'];
 function setControlsReady(ready: boolean) {
   for (const id of GATED_CONTROLS) ($(id) as HTMLButtonElement | HTMLSelectElement).disabled = !ready;
 }
@@ -143,24 +147,92 @@ function plannerApplies(name: string): boolean {
 let mainTab: 'code' | 'wave' = 'code';
 const waveViewer = new WaveformViewer($('wave'));
 
+// ── Drawn circuits (.circ) ─────────────────────────────────────────────────
+// Each name.circ generates the Verilog module name.v on every change.
+const CIRCUIT_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+let loadedCircuit = '';
+
+function projectCircuits(): Map<string, Circuit> {
+  const out = new Map<string, Circuit>();
+  for (const [name, text] of Object.entries(project?.files ?? {})) {
+    if (name.endsWith('.circ')) out.set(name.slice(0, -5), parseCircuit(text));
+  }
+  return out;
+}
+
+function isGeneratedVerilog(name: string): boolean {
+  return name.endsWith('.v') && `${name.slice(0, -2)}.circ` in (project?.files ?? {});
+}
+
+/** Regenerate every circuit's Verilog (a sub-circuit's ports may have changed). */
+function regenerateCircuits(): boolean {
+  const circuits = projectCircuits();
+  const subs = subInterfaces(circuits);
+  let added = false;
+  for (const [name, circ] of circuits) {
+    const file = `${name}.v`;
+    if (!(file in project.files)) added = true;
+    project.files[file] = generateVerilog(name, circ, subs, `${name}.circ`).verilog;
+  }
+  return added;
+}
+
+const circuitEditor = new CircuitEditor($('circuit'), {
+  onChange: (circ) => {
+    if (!currentFile.endsWith('.circ')) return;
+    project.files[currentFile] = serializeCircuit(circ);
+    if (regenerateCircuits()) renderFiles();
+    scheduleSave();
+  },
+  circuits: projectCircuits,
+});
+
+function newCircuit() {
+  const name = prompt(t('prompt.circuitName'), 'circuit1')?.trim();
+  if (!name) return;
+  if (!CIRCUIT_NAME.test(name)) return alert(t('alert.badCircuitName'));
+  const file = `${name}.circ`;
+  if (!(file in project.files)) {
+    project.files[file] = serializeCircuit(emptyCircuit());
+    regenerateCircuits();
+    scheduleSave();
+  }
+  openFile(file);
+}
+
+/** Files the server understands (drawn circuits are sent as their generated Verilog). */
+function sourceFiles(): Record<string, string> {
+  return Object.fromEntries(Object.entries(project.files).filter(([n]) => !n.endsWith('.circ')));
+}
+
 function showView() {
   const wave = mainTab === 'wave' && !$('tab-wave').hidden;
   $('wave').hidden = !wave;
   $('tab-code').classList.toggle('active', !wave);
   $('tab-wave').classList.toggle('active', wave);
-  const usePlanner = !wave && plannerApplies(currentFile);
+  const circuit = !wave && currentFile.endsWith('.circ');
+  $('circuit').hidden = !circuit;
+  const usePlanner = !wave && !circuit && plannerApplies(currentFile);
   $('view-toggle').hidden = !usePlanner;
   const board = usePlanner && fileView === 'board';
   $('planner').hidden = !board;
-  $('editor').hidden = board || wave;
+  $('editor').hidden = board || wave || circuit;
   if (wave) return;
+  if (circuit) {
+    const key = `${project.id}/${currentFile}`;
+    if (loadedCircuit !== key) {
+      loadedCircuit = key;
+      circuitEditor.load(currentFile.slice(0, -5), parseCircuit(project.files[currentFile] ?? ''));
+    }
+    return;
+  }
   $('view-board').classList.toggle('active', board);
   $('view-text').classList.toggle('active', !board);
   if (board) {
     const top = $<HTMLInputElement>('top').value.trim() || project.top;
     planner.open(project.files[currentFile] ?? '', findModulePorts(project.files, top), top);
   } else {
-    editor.setDoc(currentFile, project.files[currentFile] ?? '', currentFile === '');
+    editor.setDoc(currentFile, project.files[currentFile] ?? '', currentFile === '' || isGeneratedVerilog(currentFile));
   }
 }
 
@@ -308,7 +380,7 @@ async function build() {
   $<HTMLButtonElement>('simulate').disabled = true;
   setStatus('status.submitting');
   try {
-    const { job_id } = await submitBuild({ board: project.board, top: project.top, files: project.files, lint: $<HTMLInputElement>('lint').checked });
+    const { job_id } = await submitBuild({ board: project.board, top: project.top, files: sourceFiles(), lint: $<HTMLInputElement>('lint').checked });
     if (gen !== buildGen) return; // superseded (e.g. project switched) while submitting
     closeStream = streamEvents(job_id, async (ev) => {
       if (gen !== buildGen) return; // stale job; the UI has moved on -- never touch it
@@ -392,7 +464,7 @@ async function simulate() {
   };
   setStatus('status.submitting');
   try {
-    const { job_id } = await submitSim({ board: project.board, testbench: tb, files: project.files });
+    const { job_id } = await submitSim({ board: project.board, testbench: tb, files: sourceFiles() });
     if (gen !== buildGen) return;
     closeStream = streamEvents(job_id, async (ev) => {
       if (gen !== buildGen) return;
@@ -497,6 +569,7 @@ async function init() {
   $('tab-wave').onclick = () => { mainTab = 'wave'; showView(); };
   $('simulate').onclick = () => void simulate();
   $('new-tb').onclick = newTestbench;
+  $('new-circuit').onclick = newCircuit;
   $('view-text').onclick = () => { fileView = 'text'; showView(); };
   $('export').onclick = () => {
     const a = document.createElement('a');
@@ -557,6 +630,7 @@ function initLanguage() {
   applyStatic();
   onLangChange(() => {
     applyStatic();
+    circuitEditor.relabel();
     setStatus(lastStatus.key, lastStatus.vars, lastStatus.kind);
     if (project) {
       renderFiles();

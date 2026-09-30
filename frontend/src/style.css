@@ -307,6 +307,76 @@ main {
 .wv-canvas-wrap { position: relative; min-width: 0; }
 .wv-canvas-wrap canvas { display: block; cursor: crosshair; touch-action: none; }
 
+/* ── Circuit editor ────────────────────────────────────────────────────── */
+#circuit[hidden] { display: none; }
+#new-circuit { margin: 6px 12px 0; width: auto; }
+.ce { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ce-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 14px; }
+.ce-modes { width: 200px; }
+.ce-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ce-tools[hidden] { display: none; }
+.ce-tools .btn-ghost, .ce-tools .btn-primary, .ce-tools .btn-tertiary, .ce-tools select { height: 30px; }
+.ce-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 2px; margin: 0 14px; }
+.ce-side { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow: auto; }
+.ce-side[hidden] { display: none; }
+.ce-simulating .ce-body { grid-template-columns: minmax(0, 1fr); }
+.ce-palette, .ce-props { background: var(--hf-surface-container-low); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.ce-palette-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.ce-pal-btn { height: 28px; padding: 0 4px; border: 0; background: var(--hf-surface-container-highest); color: var(--hf-text-secondary);
+  font-size: 0.6875rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ce-pal-btn:hover { background: var(--hf-hover); color: var(--hf-primary); box-shadow: inset 0 -2px 0 var(--hf-primary); }
+.ce-hint { font-size: 0.6875rem; color: var(--hf-text-muted); line-height: 1.5; }
+.ce-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.6875rem; color: var(--hf-text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+.ce-field input { width: 100%; height: 30px; font-family: var(--font-mono); font-size: 0.8125rem; text-transform: none; letter-spacing: 0; }
+.ce-prop-actions { display: flex; gap: 6px; }
+.ce-prop-actions .btn-ghost { flex: 1; height: 30px; padding: 0 6px; }
+.ce-canvas { width: 100%; height: 100%; min-height: 360px; background: var(--hf-surface-dim); outline: none; touch-action: none; user-select: none; }
+.ce-canvas:focus-visible { box-shadow: inset 0 0 0 1px var(--hf-primary); }
+.ce-dot { fill: var(--hf-text-faint); }
+.ce-problems { margin: 8px 14px 12px; display: flex; flex-direction: column; gap: 2px; }
+.ce-problem { font-family: var(--font-mono); font-size: 0.75rem; color: var(--hf-error); }
+.ce-problem-warn { color: var(--syn-number); }
+
+/* SVG parts */
+.ce-wire { stroke: var(--hf-text-secondary); stroke-width: 2; stroke-linecap: square; }
+.ce-wire.ce-bus { stroke: var(--hf-tertiary); stroke-width: 3.5; }
+.ce-wire-hit { stroke: transparent; stroke-width: 12; cursor: pointer; }
+.ce-wire.ce-sel { stroke: #F7C66B; }
+.ce-wire.ce-preview { stroke: var(--hf-primary); stroke-dasharray: 5 4; }
+.ce-junction { fill: var(--hf-text-secondary); }
+.ce-v-1 { stroke: #3DFF9E !important; fill: #3DFF9E; }
+.ce-v-0 { stroke: #1F6B50 !important; fill: #1F6B50; }
+.ce-v-float { stroke: #5B6B80 !important; stroke-dasharray: 3 3; }
+.ce-v-err { stroke: var(--hf-error) !important; fill: var(--hf-error); }
+.ce-bus-value { font-family: var(--font-mono); font-size: 11px; fill: var(--hf-tertiary); text-anchor: middle; }
+.ce-comp { cursor: move; }
+.ce-simulating .ce-comp { cursor: default; }
+.ce-simulating .ce-t-in, .ce-simulating .ce-t-clock { cursor: pointer; }
+.ce-body { fill: var(--hf-surface-container-highest); stroke: var(--hf-text-secondary); stroke-width: 1.5; }
+.ce-comp.ce-sel .ce-body { stroke: #F7C66B; stroke-width: 2.5; }
+.ce-comp.ce-bad .ce-body { stroke: var(--hf-error); stroke-width: 2.5; }
+.ce-comp.ce-warn .ce-body { stroke-dasharray: 4 3; }
+.ce-comp.ce-on .ce-body { fill: #1F6B50; stroke: #3DFF9E; }
+.ce-comp.ce-ghost { opacity: 0.55; pointer-events: none; }
+.ce-text { font-family: var(--font-display); font-weight: 700; font-size: 14px; fill: var(--hf-text); text-anchor: middle; pointer-events: none; }
+.ce-small { font-size: 10px; }
+.ce-value { font-family: var(--font-mono); font-size: 12px; }
+.ce-label { font-family: var(--font-mono); font-size: 11px; fill: var(--hf-text-muted); text-anchor: middle; pointer-events: none; }
+.ce-pin-name { font-family: var(--font-mono); font-size: 10px; fill: var(--hf-text-muted); pointer-events: none; }
+.ce-right { text-anchor: start; }
+.ce-left { text-anchor: end; }
+.ce-label.ce-right { text-anchor: end; }
+.ce-label.ce-left { text-anchor: start; }
+.ce-glyph { fill: none; stroke: var(--hf-primary); stroke-width: 2; }
+.ce-bar { fill: var(--hf-tertiary); }
+.ce-led { fill: #2A1616; stroke: var(--hf-text-secondary); stroke-width: 1.5; }
+.ce-led.ce-led-on { fill: #FF5B55; filter: drop-shadow(0 0 6px #FF5B55); }
+.ce-bubble { fill: var(--hf-surface-container-highest); stroke: var(--hf-text-secondary); stroke-width: 1.5; }
+.ce-stub { stroke: var(--hf-text-secondary); stroke-width: 1.5; }
+.ce-pin { fill: var(--hf-text-secondary); cursor: crosshair; }
+.ce-pin-bus { fill: var(--hf-tertiary); }
+.ce-pin:hover { fill: var(--hf-primary); r: 5; }
+
 /* ── View toggle (Board | Text) for .xdc files ─────────────────────────── */
 .view-toggle { display: flex; gap: 2px; padding: 10px 14px 0; }
 .view-toggle[hidden] { display: none; }
@@ -453,5 +523,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 16px; }
   .panel-output { order: 2; }
   .panel-editor { order: 3; height: 70vh; }
   #log { flex: none; min-height: 90px; max-height: 240px; }
+  .ce-body { grid-template-columns: 1fr; }
+  .ce-side { max-height: 260px; }
   .panel-editor { height: auto; min-height: 70vh; }
 }
