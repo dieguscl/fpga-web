@@ -118,6 +118,14 @@ class SecurityHeadersMiddleware:
                 headers = list(message.get("headers", []))
                 headers.append((b"cross-origin-opener-policy", b"same-origin"))
                 headers.append((b"cross-origin-embedder-policy", b"require-corp"))
+                # Vite's /assets/ files are content-hashed; everything else (the
+                # SPA shell) must be revalidated so a deploy shows up on reload.
+                if not any(k.lower() == b"cache-control" for k, _ in headers):
+                    path = scope.get("path", "")
+                    if path.startswith("/assets/"):
+                        headers.append((b"cache-control", b"public, max-age=31536000, immutable"))
+                    elif not path.startswith("/api/"):
+                        headers.append((b"cache-control", b"no-cache"))
                 message = {**message, "headers": headers}
             await send(message)
 

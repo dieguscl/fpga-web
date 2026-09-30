@@ -320,6 +320,18 @@ async def test_cross_origin_isolation_headers(client, tmp_path):
         assert r.headers["cross-origin-embedder-policy"] == "require-corp"
 
 
+
+async def test_cache_headers(client, tmp_path):
+    # The SPA shell must be revalidated so deploys show up; hashed assets are immutable.
+    web = tmp_path / "web"
+    (web / "assets").mkdir(parents=True)
+    (web / "index.html").write_text("<h1>hi</h1>")
+    (web / "assets" / "index-abc123.css").write_text("body{}")
+    c = await client(static_dir=web)
+    assert (await c.get("/")).headers["cache-control"] == "no-cache"
+    assert "immutable" in (await c.get("/assets/index-abc123.css")).headers["cache-control"]
+    assert "cache-control" not in (await c.get("/api/boards")).headers
+
 # --- Controller ruling: bitstream endpoint must not serve a symlink ---
 
 
