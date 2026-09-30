@@ -42,7 +42,7 @@
 
     <div class="topbar-end">
       <button id="help" class="btn-ghost btn-icon" title="USB setup for flashing" data-i18n="btn.usbSetup" data-i18n-title="btn.usbSetup.title">USB setup</button>
-      <select id="lang" class="lang-select" aria-label="Language" data-i18n-aria="lang.aria"></select>
+      <button id="settings" class="btn-ghost btn-icon" title="Settings" data-i18n-title="settings.title" data-i18n-aria="settings.title" aria-label="Settings">⚙</button>
     </div>
   </header>
 
@@ -86,6 +86,20 @@
     </section>
   </main>
 
+  <dialog id="settings-dialog">
+    <h3 data-i18n="settings.title">Settings</h3>
+    <div class="settings-form">
+      <label class="field-col"><span class="label" data-i18n="settings.language">Language</span><select id="lang"></select></label>
+      <div class="field-col"><span class="label" data-i18n="settings.theme">Appearance</span>
+        <div class="seg-row" role="radiogroup">
+          <button class="seg-btn" data-theme-choice="system" data-i18n="theme.system">System</button>
+          <button class="seg-btn" data-theme-choice="dark" data-i18n="theme.dark">Dark</button>
+          <button class="seg-btn" data-theme-choice="light" data-i18n="theme.light">Light</button>
+        </div>
+      </div>
+    </div>
+    <form method="dialog"><button class="btn-primary" data-i18n="btn.close">Close</button></form>
+  </dialog>
   <dialog id="setup-help" class="hex-crop"><div id="setup-help-body"></div><form method="dialog"><button class="btn-primary" data-i18n="btn.close">Close</button></form></dialog>
   <input type="file" id="import-file" accept=".zip" hidden />
   <script type="module" src="/src/main.ts"></script>

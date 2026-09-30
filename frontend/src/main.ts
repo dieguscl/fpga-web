@@ -7,6 +7,7 @@ import '@fontsource/jetbrains-mono/400.css';
 import { ApiError, fetchBitstream, fetchWave, submitSim, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent } from './api';
 import { Editor } from './editor';
 import { parseLocations } from './errors';
+import { applyTheme, getTheme, onThemeChange, setTheme, type ThemeChoice } from './theme';
 import { applyStatic, getLang, LANGS, onLangChange, setLang, t, type Key, type Lang } from './i18n';
 import { PinPlanner } from './pinplanner';
 import { findModulePorts } from './verilog-ports';
@@ -530,9 +531,27 @@ async function init() {
   setControlsReady(true);
 }
 
+function initSettings() {
+  applyTheme();
+  const marks = () => document.querySelectorAll<HTMLButtonElement>('[data-theme-choice]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.themeChoice === getTheme());
+    b.setAttribute('aria-checked', String(b.dataset.themeChoice === getTheme()));
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-theme-choice]').forEach((b) => {
+    b.onclick = () => {
+      setTheme(b.dataset.themeChoice as ThemeChoice);
+      marks();
+    };
+  });
+  marks();
+  onThemeChange(() => window.dispatchEvent(new Event('resize'))); // canvas views re-read theme colours
+  $('settings').onclick = () => $<HTMLDialogElement>('settings-dialog').showModal();
+}
+
 function initLanguage() {
   const sel = $<HTMLSelectElement>('lang');
-  for (const l of LANGS) sel.append(new Option(l.label, l.id, false, l.id === getLang()));
+  const names: Record<Lang, string> = { en: 'English', 'pt-PT': 'Português (Portugal)', es: 'Español' };
+  for (const l of LANGS) sel.append(new Option(names[l.id], l.id, false, l.id === getLang()));
   sel.onchange = () => setLang(sel.value as Lang);
   document.documentElement.lang = getLang();
   applyStatic();
@@ -552,5 +571,6 @@ function initLanguage() {
   });
 }
 
+initSettings();
 initLanguage();
 init().catch((e) => setStatus('status.loadFailed', { msg: String(e) }, 'err'));

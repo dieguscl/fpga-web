@@ -68,6 +68,7 @@ export class WaveformViewer {
     this.ctx = this.canvas.getContext('2d')!;
 
     new ResizeObserver(() => this.draw()).observe(this.wrap);
+    window.addEventListener('resize', () => this.draw()); // also fired on theme changes
     this.bindInput();
   }
 

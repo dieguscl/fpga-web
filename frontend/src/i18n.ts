@@ -117,6 +117,12 @@ const en = {
   'wv.filter': 'Filter signals…',
   'wv.remove': 'Remove from view',
   'wv.clickHint': 'click the waves to place a cursor',
+  'settings.title': 'Settings',
+  'settings.language': 'Language',
+  'settings.theme': 'Appearance',
+  'theme.system': 'System',
+  'theme.dark': 'Dark',
+  'theme.light': 'Light',
 };
 
 export type Key = keyof typeof en;
@@ -229,6 +235,12 @@ const ptPT: Record<Key, string> = {
   'wv.filter': 'Filtrar sinais…',
   'wv.remove': 'Remover da vista',
   'wv.clickHint': 'clique nas ondas para colocar um cursor',
+  'settings.title': 'Definições',
+  'settings.language': 'Idioma',
+  'settings.theme': 'Aparência',
+  'theme.system': 'Sistema',
+  'theme.dark': 'Escuro',
+  'theme.light': 'Claro',
 };
 
 const es: Record<Key, string> = {
@@ -339,6 +351,12 @@ const es: Record<Key, string> = {
   'wv.filter': 'Filtrar señales…',
   'wv.remove': 'Quitar de la vista',
   'wv.clickHint': 'haz clic en las ondas para poner un cursor',
+  'settings.title': 'Ajustes',
+  'settings.language': 'Idioma',
+  'settings.theme': 'Apariencia',
+  'theme.system': 'Sistema',
+  'theme.dark': 'Oscuro',
+  'theme.light': 'Claro',
 };
 
 const DICTS: Record<Lang, Record<Key, string>> = { en, 'pt-PT': ptPT, es };
