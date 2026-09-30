@@ -7,6 +7,8 @@ import '@fontsource/jetbrains-mono/400.css';
 import { ApiError, fetchBitstream, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent } from './api';
 import { Editor } from './editor';
 import { parseLocations } from './errors';
+import { PinPlanner } from './pinplanner';
+import { findModulePorts } from './verilog-ports';
 import { flash, webUsbSupported } from './flasher';
 import { exportZip, importZip, newProject, NAME_RE, ProjectStore, type Project } from './project';
 import { detectOS, setupHelpHtml } from './setup-help';
@@ -114,12 +116,42 @@ function renderFiles() {
   }
 }
 
+// Pin planner: .xdc files on boards with a planner open as a board picture
+// (Board view) with a Text toggle. The planner rewrites the .xdc on each change.
+const PLANNER_BOARDS = new Set(['basys3']);
+let fileView: 'board' | 'text' = 'board';
+const planner = new PinPlanner($('planner'), (xdc) => {
+  if (!currentFile) return;
+  project.files[currentFile] = xdc;
+  scheduleSave();
+});
+
+function plannerApplies(name: string): boolean {
+  return !!project && PLANNER_BOARDS.has(project.board) && /\.xdc$/i.test(name);
+}
+
+function showView() {
+  const usePlanner = plannerApplies(currentFile);
+  $('view-toggle').hidden = !usePlanner;
+  const board = usePlanner && fileView === 'board';
+  $('planner').hidden = !board;
+  $('editor').hidden = board;
+  $('view-board').classList.toggle('active', board);
+  $('view-text').classList.toggle('active', !board);
+  if (board) {
+    const top = $<HTMLInputElement>('top').value.trim() || project.top;
+    planner.open(project.files[currentFile] ?? '', findModulePorts(project.files, top), top);
+  } else {
+    editor.setDoc(currentFile, project.files[currentFile] ?? '', currentFile === '');
+  }
+}
+
 function openFile(name: string) {
   currentFile = name;
   // No files left (name === ''): show an empty, read-only editor instead of
   // a writable "nameless" document that would silently create a `''` entry
   // in project.files the moment the user typed into it.
-  editor.setDoc(name, project.files[name] ?? '', name === '');
+  showView();
   renderFiles();
 }
 
@@ -331,6 +363,7 @@ async function init() {
       project.board = sel.value;
       scheduleSave();
       resetOutput();
+      showView(); // the pin planner only applies to some boards
     }
   };
   $<HTMLInputElement>('top').oninput = () => {
@@ -355,6 +388,8 @@ async function init() {
   $('build').onclick = build;
   $('flash').onclick = doFlash;
   $('help').onclick = showHelp;
+  $('view-board').onclick = () => { fileView = 'board'; showView(); };
+  $('view-text').onclick = () => { fileView = 'text'; showView(); };
   $('export').onclick = () => {
     const a = document.createElement('a');
     const url = URL.createObjectURL(new Blob([new Uint8Array(exportZip(project))], { type: 'application/zip' }));

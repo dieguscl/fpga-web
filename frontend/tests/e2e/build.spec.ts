@@ -34,3 +34,25 @@ test('syntax error shows a clickable location', async ({ page }) => {
   await link.click();
   await expect(page.locator('.cm-activeLine')).toBeVisible();
 });
+
+test('basys3 pin planner: clear, auto-assign, build', async ({ page }) => {
+  await page.goto('/');
+  await page.selectOption('#board', 'basys3');
+  page.once('dialog', (d) => d.accept('planner'));
+  await page.click('#new-project');
+  await page.locator('#file-list li', { hasText: 'basys3.xdc' }).click();
+  await expect(page.locator('#planner svg')).toBeVisible();
+  await expect(page.locator('.pp-summary')).toContainText('17/17');
+  page.once('dialog', (d) => d.accept());
+  await page.getByRole('button', { name: 'Clear all' }).click();
+  await expect(page.locator('.pp-summary')).toContainText('0/17');
+  await page.locator('[data-signal="led[3]"]').first().click();
+  await page.selectOption('select[data-signal="led[3]"]', 'leds[3]');
+  await expect(page.locator('.pp-summary')).toContainText('1/17');
+  await page.click('#pp-auto');
+  await expect(page.locator('.pp-summary')).toContainText('17/17');
+  await page.click('#view-text');
+  await expect(page.locator('.cm-content')).toContainText('PACKAGE_PIN V19 IOSTANDARD LVCMOS33 } [get_ports { leds[3] }]');
+  await page.click('#build');
+  await expect(page.locator('#status')).toContainText('Build succeeded', { timeout: 150_000 });
+});

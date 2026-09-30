@@ -241,7 +241,62 @@ main {
 #file-list li button:hover { color: var(--hf-error); }
 
 .panel-editor { background: var(--hf-surface); overflow: hidden; }
+#editor { flex: 1; min-height: 0; }
 #editor .cm-editor { height: 100%; }
+#editor[hidden], #planner[hidden] { display: none; }
+
+/* ── View toggle (Board | Text) for .xdc files ─────────────────────────── */
+.view-toggle { display: flex; gap: 2px; padding: 10px 14px 0; }
+.view-toggle[hidden] { display: none; }
+.seg-btn {
+  height: 28px; padding: 0 14px; border: 0;
+  background: var(--hf-surface-container-high); color: var(--hf-text-muted);
+  font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+}
+.seg-btn.active { background: var(--hf-surface-container-highest); color: var(--hf-primary); box-shadow: inset 0 -2px 0 var(--hf-primary); }
+
+/* ── Pin planner ───────────────────────────────────────────────────────── */
+#planner { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+.pp-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 14px; }
+.pp-title { font-family: var(--font-display); font-weight: 700; font-size: 1rem; }
+.pp-summary { flex: 1; font-size: 0.75rem; color: var(--hf-text-muted); font-family: var(--font-mono); }
+.pp-summary.pp-warn { color: #F7C66B; }
+.pp-body { display: flex; flex-direction: column; gap: 2px; padding: 0 14px 14px; }
+
+.pp-board { width: 100%; height: auto; max-height: 62vh; display: block; user-select: none; }
+.pp-pcb { fill: #0E3B2E; }
+.pp-board-name { font-family: var(--font-display); font-weight: 700; font-size: 30px; fill: #E8ECF4; letter-spacing: 0.04em; }
+.pp-hint { font-size: 13px; fill: #9FC7B6; }
+.pp-label { font-size: 14px; font-weight: 600; fill: #C8E4D8; font-family: var(--font-mono); }
+.pp-chip { fill: #111827; }
+.pp-chip-label { font-family: var(--font-display); font-weight: 700; font-size: 18px; fill: #E8ECF4; text-anchor: middle; }
+.pp-digit { fill: #05130E; }
+.pp-block { fill: #16302A; cursor: pointer; }
+.pp-part { fill: #C9CED8; cursor: pointer; }
+.pp-part-label { font-family: var(--font-display); font-weight: 700; font-size: 16px; fill: #E8ECF4; text-anchor: middle; pointer-events: none; }
+.pp-part + .pp-part-label { fill: #0E1729; }
+.pp-tag { fill: #16302A; cursor: pointer; }
+.pp-tag-label { font-size: 12px; font-weight: 700; fill: #C8E4D8; text-anchor: middle; pointer-events: none; font-family: var(--font-mono); }
+.pp-gnd { fill: #2A3342; }
+.pp-vcc { fill: #5A2A2A; }
+.pp-board text { pointer-events: none; }
+
+/* clickable board resources */
+.pp-pin { fill: #3A4A5E; cursor: pointer; transition: fill 0.12s; }
+.pp-pin:hover { fill: #77E6FF; }
+.pp-pin.pp-assigned { fill: #69F6B8; }
+.pp-block.pp-assigned, .pp-tag.pp-assigned { fill: #1F6B50; }
+.pp-selected-group { stroke: #77E6FF; stroke-width: 2; }
+.pp-part.pp-assigned { fill: #69F6B8; }
+
+.pp-side { background: var(--hf-surface-container-low); padding: 14px; }
+.pp-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 4px 12px; margin-top: 10px; }
+.pp-row { display: grid; grid-template-columns: 64px 42px minmax(0, 1fr); align-items: center; gap: 8px; padding: 4px 6px; }
+.pp-row.pp-focus { background: var(--hf-surface-container-highest); box-shadow: inset 2px 0 0 var(--hf-primary); }
+.pp-row-name { font-family: var(--font-display); font-weight: 700; font-size: 0.8125rem; }
+.pp-row-pin { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--hf-text-muted); }
+.pp-row select { width: 100%; max-width: none; height: 30px; font-family: var(--font-mono); font-size: 0.75rem; }
+.pp-note { margin: 12px 0 0; font-size: 0.75rem; color: #F7C66B; font-family: var(--font-mono); word-break: break-word; }
 
 .panel-output { background: var(--hf-surface-container-low); }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 16px 12px; }
@@ -331,4 +386,5 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 16px; }
   .panel-output { order: 2; }
   .panel-editor { order: 3; height: 70vh; }
   #log { flex: none; min-height: 90px; max-height: 240px; }
+  .panel-editor { height: auto; min-height: 70vh; }
 }

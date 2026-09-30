@@ -49,7 +49,14 @@
       <ul id="file-list"></ul>
       <button id="add-file" class="btn-ghost btn-block" disabled>+ New file</button>
     </aside>
-    <section id="editor" class="panel panel-editor"></section>
+    <section class="panel panel-editor">
+      <div id="view-toggle" class="view-toggle" hidden>
+        <button id="view-board" class="seg-btn active">Board</button>
+        <button id="view-text" class="seg-btn">Text</button>
+      </div>
+      <div id="editor"></div>
+      <div id="planner" hidden></div>
+    </section>
     <section id="output" class="panel panel-output">
       <div class="panel-head"><span class="label">Output</span></div>
       <div class="actions">
