@@ -561,3 +561,5 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 16px; }
   .ce-side { max-height: 260px; }
   .panel-editor { height: auto; min-height: 70vh; }
 }
+.ce-invert { display: flex; gap: 10px; flex-wrap: wrap; }
+.ce-invert label { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; cursor: pointer; }

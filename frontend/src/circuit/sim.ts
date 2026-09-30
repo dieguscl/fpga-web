@@ -1,7 +1,7 @@
 // In-browser live simulation of a drawn circuit (Digital-style): click inputs,
 // step or run the clock, watch every wire. Values are unsigned integers up to
 // 32 bits; undriven inputs read as 0 (same as the generated Verilog).
-import { bitsOf, circuitInterface, compDef, parseParts, type Circuit, type Comp, type PlacedPin, type SubInterface } from './model';
+import { bitsOf, circuitInterface, compDef, inputInverted, parseParts, type Circuit, type Comp, type PlacedPin, type SubInterface } from './model';
 import { buildNetlist, type Net, type Netlist } from './netlist';
 
 const MAX_DEPTH = 8;
@@ -125,7 +125,7 @@ export class CircuitSim {
           this.write(c, 'y', ~this.read(c, 'a') & m, changed);
           break;
         case 'and': case 'or': case 'xor': case 'nand': case 'nor': case 'xnor': {
-          const ins = compDef(c).pins.filter((p) => p.dir === 'in').map((p) => this.read(c, p.name));
+          const ins = compDef(c).pins.filter((p) => p.dir === 'in').map((p, i) => (inputInverted(c, i) ? ~this.read(c, p.name) : this.read(c, p.name)) & m);
           let r = ins[0];
           for (const x of ins.slice(1)) r = c.type.includes('and') ? r & x : c.type.includes('xor') || c.type === 'xnor' ? r ^ x : r | x;
           if (c.type === 'nand' || c.type === 'nor' || c.type === 'xnor') r = ~r;

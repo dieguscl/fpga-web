@@ -4,7 +4,7 @@
 
 import { t, type Key } from '../i18n';
 import {
-  GATES, GRID, MAX_BITS, bitsOf, compDef, emptyCircuit, placedPins,
+  GATES, GRID, MAX_BITS, bitsOf, compDef, emptyCircuit, inputInverted, placedPins,
   type Circuit, type Comp, type CompType, type Pt, type Rot, type SubInterface, type Wire,
 } from './model';
 import { buildNetlist, type Net, type Netlist } from './netlist';
@@ -603,7 +603,30 @@ export class CircuitEditor {
     if (!['clock', 'led', 'split', 'merge', 'sub'].includes(c.type)) {
       field('ce.p.bits', num(bitsOf(c), 1, MAX_BITS, (v) => (c.props.bits = v)));
     }
-    if (GATES.includes(c.type)) field('ce.p.inputs', num(c.props.inputs ?? 2, 2, 4, (v) => (c.props.inputs = v)));
+    if (GATES.includes(c.type)) {
+      field('ce.p.inputs', num(c.props.inputs ?? 2, 2, 4, (v) => {
+        c.props.inputs = v;
+        c.props.invert = c.props.invert?.filter((i) => i < v);
+        if (!c.props.invert?.length) delete c.props.invert;
+      }));
+      const box = div('ce-invert');
+      const n = compDef(c).pins.filter((p) => p.dir === 'in').length;
+      for (let i = 0; i < n; i++) {
+        const l = document.createElement('label');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = inputInverted(c, i);
+        cb.dataset.input = String(i);
+        cb.onchange = () => this.commit(() => {
+          const set = new Set(c.props.invert ?? []);
+          if (cb.checked) set.add(i); else set.delete(i);
+          if (set.size) c.props.invert = [...set].sort((a, b) => a - b); else delete c.props.invert;
+        });
+        l.append(cb, document.createTextNode(String(i + 1)));
+        box.append(l);
+      }
+      field('ce.p.invert', box);
+    }
     if (c.type === 'mux') field('ce.p.sel', num(c.props.sel ?? 1, 1, 2, (v) => (c.props.sel = v)));
     if (c.type === 'const' || c.type === 'in') field('ce.p.value', num(c.props.value ?? 0, 0, 0xffffffff, (v) => (c.props.value = v)));
     if (c.type === 'split' || c.type === 'merge') field('ce.p.parts', text(c.props.parts ?? '1,1', (v) => (c.props.parts = v)));
@@ -745,15 +768,19 @@ export class CircuitEditor {
         const bot = c.type === 'not' ? Math.max(...ys) + GRID - 2 : Math.max(...ys) + GRID / 2;
         const outX = def.pins.find((p) => p.dir === 'out')!.dx * GRID;
         const right = outX - (['nand', 'nor', 'xnor', 'not'].includes(c.type) ? 9 : 0); // room for the inversion bubble
-        const shape = gateShape(c.type, top, bot, right);
+        // With negated inputs the body moves right to leave room for the input bubbles.
+        const ins = def.pins.filter((p) => p.dir === 'in');
+        const left = ins.some((_, i) => inputInverted(c, i)) ? BUBBLE * 3 : 0;
+        const shape = gateShape(c.type, top, bot, right, left);
         grp.append(el('path', { d: shape.body, class: 'ce-body' }));
         if (shape.extra) grp.append(el('path', { d: shape.extra, class: 'ce-gate-line' }));
-        for (const p of def.pins) {
-          if (p.dir !== 'in') continue;
+        ins.forEach((p, i) => {
           const y = p.dy * GRID;
           const back = shape.backX(y);
-          if (back > 4) grp.append(el('line', { x1: 0, y1: y, x2: back, y2: y, class: 'ce-stub' }));
-        }
+          const end = inputInverted(c, i) ? back - BUBBLE * 2 : back;
+          if (end > 4) grp.append(el('line', { x1: 0, y1: y, x2: end, y2: y, class: 'ce-stub' }));
+          if (inputInverted(c, i)) grp.append(el('circle', { cx: back - BUBBLE, cy: y, r: BUBBLE, class: 'ce-bubble' }));
+        });
         if (c.props.label) label((right) / 2, bot + 14, c.props.label, 'ce-label');
         break;
       }
@@ -826,22 +853,25 @@ function el(tag: string, attrs: Record<string, string | number>): SVGElement {
  * Distinctive-shape gate outlines inside x ∈ [0, right], y ∈ [top, bot].
  * backX(y) is where an input line meets the (possibly curved) back of the body.
  */
-export function gateShape(type: CompType, top: number, bot: number, right: number): { body: string; extra?: string; backX: (y: number) => number } {
+const BUBBLE = 4; // inversion bubble radius (px)
+
+/** Gate outline between x=left and x=right; backX gives where an input stub meets the body. */
+export function gateShape(type: CompType, top: number, bot: number, right: number, left = 0): { body: string; extra?: string; backX: (y: number) => number } {
   const mid = (top + bot) / 2;
   const h = bot - top;
   if (type === 'not') {
-    return { body: `M0 ${top} L${right} ${mid} L0 ${bot} Z`, backX: () => 0 };
+    return { body: `M${left} ${top} L${right} ${mid} L${left} ${bot} Z`, backX: () => left };
   }
   if (type === 'and' || type === 'nand') {
     const r = h / 2;
-    const cx = Math.max(right * 0.35, right - r);
+    const cx = Math.max(left + (right - left) * 0.35, right - r);
     return {
-      body: `M0 ${top} H${cx} A${right - cx} ${r} 0 0 1 ${cx} ${bot} H0 Z`,
-      backX: () => 0,
+      body: `M${left} ${top} H${cx} A${right - cx} ${r} 0 0 1 ${cx} ${bot} H${left} Z`,
+      backX: () => left,
     };
   }
   // OR family: concave back, pointed front. XOR adds a second back curve.
-  const shift = type === 'xor' || type === 'xnor' ? 7 : 0;
+  const shift = left + (type === 'xor' || type === 'xnor' ? 7 : 0);
   const depth = Math.min(14, h * 0.18); // how far the back curve bulges in
   const backAt = (y: number, x0: number) => {
     const s = (y - top) / h;
@@ -849,7 +879,7 @@ export function gateShape(type: CompType, top: number, bot: number, right: numbe
   };
   const body = `M${shift} ${top} Q${shift + right * 0.55} ${top} ${right} ${mid} Q${shift + right * 0.55} ${bot} ${shift} ${bot} ` +
     `Q${shift + depth * 2} ${mid} ${shift} ${top} Z`;
-  const extra = shift ? `M0 ${top} Q${depth * 2} ${mid} 0 ${bot}` : undefined;
+  const extra = shift > left ? `M${left} ${top} Q${left + depth * 2} ${mid} ${left} ${bot}` : undefined;
   return { body, extra, backX: (y) => backAt(y, shift) };
 }
 

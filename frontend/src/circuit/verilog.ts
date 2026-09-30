@@ -1,5 +1,5 @@
 // Generate a Verilog module from a drawn circuit.
-import { bitsOf, circuitInterface, compDef, parseParts, portName, type Circuit, type Comp, type PlacedPin, type SubInterface } from './model';
+import { bitsOf, circuitInterface, compDef, inputInverted, parseParts, portName, type Circuit, type Comp, type PlacedPin, type SubInterface } from './model';
 import { buildNetlist, type Net, type Netlist } from './netlist';
 
 export interface GenResult {
@@ -75,7 +75,7 @@ export function generateVerilog(moduleName: string, circ: Circuit, subs: Map<str
         body.push(`  assign ${sig(c, 'y')} = ~${sig(c, 'a')};${label}`);
         break;
       case 'and': case 'or': case 'xor': case 'nand': case 'nor': case 'xnor': {
-        const ins = def.pins.filter((p) => p.dir === 'in').map((p) => sig(c, p.name)).join(` ${ops[c.type]} `);
+        const ins = def.pins.filter((p) => p.dir === 'in').map((p, i) => (inputInverted(c, i) ? '~' : '') + sig(c, p.name)).join(` ${ops[c.type]} `);
         const neg = c.type.startsWith('n') || c.type === 'xnor';
         body.push(`  assign ${sig(c, 'y')} = ${neg ? `~(${ins})` : ins};${label}`);
         break;

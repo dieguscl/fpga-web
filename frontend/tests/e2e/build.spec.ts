@@ -145,14 +145,21 @@ test('draw a circuit, get Verilog, run it live', async ({ page }) => {
   await expect(page.locator('.ce-problem')).toHaveCount(0);
   await page.keyboard.press('Control+z');
   await expect(page.locator('.ce-comp')).toHaveCount(4);
+  // negate the gate's second input (Digital's "inverted inputs"): y = a & ~b
+  await page.keyboard.press('Escape');
+  await page.locator('.ce-comp.ce-t-and').click();
+  await page.locator('.ce-invert input[data-input="1"]').check();
+  await expect(page.locator('.ce-comp.ce-t-and .ce-bubble')).toHaveCount(1);
+  if (process.env.INVERT_SHOT) await page.locator('.ce-comp.ce-t-and').screenshot({ path: process.env.INVERT_SHOT });
   await page.locator('#file-list li', { hasText: 'gates.v' }).click();
-  await expect(page.locator('.cm-content')).toContainText('assign out0 = in0 & in1;');
+  await expect(page.locator('.cm-content')).toContainText('assign out0 = in0 & ~in1;');
   await page.locator('#file-list li', { hasText: 'gates.circ' }).click();
   await page.click('.ce-modes [data-mode="sim"]');
-  await page.locator('.ce-comp.ce-t-in').nth(0).click();
   await expect(page.locator('.ce-comp.ce-t-out.ce-on')).toHaveCount(0);
-  await page.locator('.ce-comp.ce-t-in').nth(1).click();
+  await page.locator('.ce-comp.ce-t-in').nth(0).click();
   await expect(page.locator('.ce-comp.ce-t-out.ce-on')).toHaveCount(1);
+  await page.locator('.ce-comp.ce-t-in').nth(1).click();
+  await expect(page.locator('.ce-comp.ce-t-out.ce-on')).toHaveCount(0);
 });
 
 test('virtual Basys 3: switches drive LEDs and the 7-segment display', async ({ page }) => {

@@ -17,6 +17,7 @@ export interface CompProps {
   label?: string;
   bits?: number; // data width
   inputs?: number; // gate inputs (2..4)
+  invert?: number[]; // gate input indexes that are negated (bubble on the input)
   value?: number; // const value / in initial value
   sel?: number; // mux select bits (1..2)
   parts?: string; // splitter/merger widths, low bits first, e.g. "4,4"
@@ -71,6 +72,11 @@ export interface SubInterface {
 }
 
 export const GATES: CompType[] = ['and', 'or', 'nand', 'nor', 'xor', 'xnor'];
+
+/** Whether gate input `i` is negated (Digital's "inverted inputs"). */
+export function inputInverted(c: Comp, i: number): boolean {
+  return GATES.includes(c.type) && !!c.props.invert?.includes(i);
+}
 
 export function emptyCircuit(): Circuit {
   return { version: 1, components: [], wires: [] };
