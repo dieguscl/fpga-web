@@ -262,3 +262,14 @@ test('typographic quotes are converted, not rejected', async ({ page }) => {
   await expect(page.locator('.cm-content')).toContainText("initial s = 2'b01;");
   await expect(page.locator('.cm-content')).not.toContainText('’');
 });
+
+test('without WebUSB: no banner, USB setup and Flash disabled, warning icon explains', async ({ page }) => {
+  await page.addInitScript(() => { delete (Navigator.prototype as unknown as Record<string, unknown>).usb; });
+  await page.goto('/');
+  await expect(page.locator('#usb-warn')).toBeVisible();
+  await expect(page.locator('#help')).toBeDisabled();
+  await expect(page.locator('#flash')).toBeDisabled();
+  await expect(page.locator('#banner')).toHaveCount(0);
+  await page.click('#usb-warn');
+  await expect(page.locator('#setup-help')).toContainText('WebUSB');
+});

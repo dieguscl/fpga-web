@@ -1,14 +1,14 @@
 // Lucide icons for buttons. Icon-only buttons carry their (translated) label in
 // the tooltip and aria-label; labelled buttons show icon + text.
 import {
-  Activity, CircuitBoard, ClipboardPaste, Copy, Cpu, Download, Eraser, Expand, FilePlus, FlaskConical, FolderPlus, Fullscreen, Hammer,
+  Activity, CircuitBoard, TriangleAlert, ClipboardPaste, Copy, Cpu, Download, Eraser, Expand, FilePlus, FlaskConical, FolderPlus, Fullscreen, Hammer,
   ListPlus, Pause, Play, Redo2, RotateCcw, RotateCw, Settings, StepForward, Trash2, Undo2, Upload,
   Usb, WandSparkles, Zap, ZoomIn, ZoomOut, createElement, type IconNode,
 } from 'lucide';
 import { t, type Key } from './i18n';
 
 export const ICONS = {
-  activity: Activity, board: CircuitBoard, paste: ClipboardPaste, copy: Copy, cpu: Cpu, download: Download,
+  activity: Activity, alert: TriangleAlert, board: CircuitBoard, paste: ClipboardPaste, copy: Copy, cpu: Cpu, download: Download,
   eraser: Eraser, filePlus: FilePlus, flask: FlaskConical, folderPlus: FolderPlus, hammer: Hammer, listPlus: ListPlus,
   fullscreen: Fullscreen, pause: Pause, play: Play, redo: Redo2, reset: RotateCcw, rotate: RotateCw, fit: Expand,
   settings: Settings, step: StepForward, trash: Trash2, undo: Undo2, upload: Upload, usb: Usb, wand: WandSparkles,

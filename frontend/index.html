@@ -9,7 +9,6 @@
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
-  <div id="banner" hidden></div>
   <header class="topbar">
     <div class="brand">
       <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
@@ -42,6 +41,7 @@
 
     <div class="topbar-end">
       <button id="help" data-icon="usb" class="btn-ghost" title="USB setup for flashing" data-i18n="btn.usbSetup" data-i18n-title="btn.usbSetup.title">USB setup</button>
+      <button id="usb-warn" data-icon="alert" class="btn-ghost btn-warn" hidden data-i18n-aria="usb.unavailable" aria-label="Flashing unavailable in this browser"></button>
       <button id="settings" data-icon="settings" class="btn-ghost btn-icon" title="Settings" data-i18n-title="settings.title" data-i18n-aria="settings.title" aria-label="Settings">⚙</button>
     </div>
   </header>

@@ -514,12 +514,6 @@ main {
 #log a.loc:hover { background: color-mix(in srgb, var(--hf-tertiary) 12%, transparent); }
 
 /* ── Banner & dialog ───────────────────────────────────────────────────── */
-#banner {
-  padding: 10px 20px;
-  background: color-mix(in srgb, var(--hf-error) 12%, var(--hf-surface-container-low));
-  border-left: 3px solid var(--hf-error);
-  font-size: 0.8125rem;
-}
 
 dialog {
   max-width: min(640px, calc(100vw - 32px));
@@ -601,3 +595,5 @@ button[data-icon] { display: inline-flex; align-items: center; justify-content: 
 .wv-expand:hover:not(:disabled) { color: var(--hf-primary); }
 .wv-bit { padding-left: 26px; background: color-mix(in srgb, var(--hf-surface-container-high) 60%, transparent); }
 .wv-bit .wv-name-label { color: var(--hf-text-secondary); }
+.btn-warn { color: var(--hf-warning, #D98E04); }
+.btn-warn:hover:not(:disabled) { color: var(--hf-warning, #D98E04); }

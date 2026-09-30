@@ -585,6 +585,15 @@ async function doFlash() {
   }
 }
 
+function showNoWebUsb() {
+  const p = document.createElement('p');
+  p.textContent = t('banner.noWebUsb');
+  const h = document.createElement('h3');
+  h.textContent = t('usb.unavailable');
+  $('setup-help-body').replaceChildren(h, p);
+  $<HTMLDialogElement>('setup-help').showModal();
+}
+
 function showHelp() {
   $('setup-help-body').innerHTML = setupHelpHtml(detectOS());
   $<HTMLDialogElement>('setup-help').showModal();
@@ -595,9 +604,10 @@ async function init() {
   const sel = $<HTMLSelectElement>('board');
   for (const b of boards) sel.append(new Option(`${b.description}${b.flash === 'download' ? t('board.downloadOnly') : ''}`, b.id));
   if (!webUsbSupported()) {
-    const banner = $('banner');
-    banner.textContent = t('banner.noWebUsb');
-    banner.hidden = false;
+    // No banner: flashing controls are disabled and a small warning icon explains why.
+    $<HTMLButtonElement>('help').disabled = true;
+    $('usb-warn').hidden = false;
+    $('flash').title = t('banner.noWebUsb');
   }
   sel.onchange = () => {
     if (confirm(t('confirm.newForBoard'))) {
@@ -631,6 +641,7 @@ async function init() {
   $('build').onclick = build;
   $('flash').onclick = doFlash;
   $('help').onclick = showHelp;
+  $('usb-warn').onclick = showNoWebUsb;
   $('view-board').onclick = () => { fileView = 'board'; showView(); };
   $('tab-code').onclick = () => { mainTab = 'code'; showView(); };
   $('tab-wave').onclick = () => { mainTab = 'wave'; showView(); };
@@ -716,7 +727,7 @@ function initLanguage() {
       const b = boardInfo(opt.value);
       if (b) opt.text = `${b.description}${b.flash === 'download' ? t('board.downloadOnly') : ''}`;
     }
-    if (!$('banner').hidden) $('banner').textContent = t('banner.noWebUsb');
+    if (!webUsbSupported()) $('flash').title = t('banner.noWebUsb');
   });
 }
 
