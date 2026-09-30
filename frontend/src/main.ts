@@ -7,6 +7,7 @@ import '@fontsource/jetbrains-mono/400.css';
 import { ApiError, fetchBitstream, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent } from './api';
 import { Editor } from './editor';
 import { parseLocations } from './errors';
+import { applyStatic, getLang, LANGS, onLangChange, setLang, t, type Key, type Lang } from './i18n';
 import { PinPlanner } from './pinplanner';
 import { findModulePorts } from './verilog-ports';
 import { flash, webUsbSupported } from './flasher';
@@ -83,9 +84,12 @@ function setControlsReady(ready: boolean) {
   for (const id of GATED_CONTROLS) ($(id) as HTMLButtonElement | HTMLSelectElement).disabled = !ready;
 }
 
-function setStatus(text: string, kind: '' | 'ok' | 'err' = '') {
+// The status line remembers its message key so a language switch can re-render it.
+let lastStatus: { key: Key; vars: Record<string, string | number>; kind: '' | 'ok' | 'err' } = { key: 'status.ready', vars: {}, kind: '' };
+function setStatus(key: Key, vars: Record<string, string | number> = {}, kind: '' | 'ok' | 'err' = '') {
+  lastStatus = { key, vars, kind };
   const s = $('status');
-  s.textContent = text;
+  s.textContent = t(key, vars);
   s.className = kind;
 }
 
@@ -99,10 +103,10 @@ function renderFiles() {
     label.textContent = name;
     const rm = document.createElement('button');
     rm.textContent = '×';
-    rm.title = `Delete ${name}`;
+    rm.title = t('file.delete.title', { name });
     rm.onclick = (e) => {
       e.stopPropagation();
-      if (!confirm(`Delete ${name}?`)) return;
+      if (!confirm(t('file.delete.confirm', { name }))) return;
       delete project.files[name];
       scheduleSave();
       // Only move the open file if the *open* file was the one deleted --
@@ -177,7 +181,7 @@ async function openProject(p: Project) {
 
 async function createProject(boardId: string, name?: string): Promise<boolean> {
   const gen = ++projectGen;
-  const projectName = name ?? prompt('Project name', `${boardId}-blinky`) ?? '';
+  const projectName = name ?? prompt(t('prompt.projectName'), `${boardId}-blinky`) ?? '';
   if (!projectName) return false;
   const tpl = await fetchTemplate(boardId);
   if (gen !== projectGen) return false; // superseded by a newer project switch
@@ -199,7 +203,7 @@ async function startNewProject(sel: HTMLSelectElement, boardId: string) {
   } catch (e) {
     sel.value = project.board;
     const msg = e instanceof ApiError ? e.message : String(e);
-    setStatus(`Failed to create project: ${msg}`, 'err');
+    setStatus('status.createFailed', { msg }, 'err');
   }
 }
 
@@ -219,7 +223,7 @@ function resetOutput() {
   $<HTMLButtonElement>('flash').disabled = true;
   dl.hidden = true;
   lastBitstream = null;
-  setStatus('Ready');
+  setStatus('status.ready');
 }
 
 function appendLog(line: string) {
@@ -280,17 +284,17 @@ async function build() {
   project.top = $<HTMLInputElement>('top').value.trim();
   scheduleSave();
   $<HTMLButtonElement>('build').disabled = true;
-  setStatus('Submitting…');
+  setStatus('status.submitting');
   try {
     const { job_id } = await submitBuild({ board: project.board, top: project.top, files: project.files, lint: $<HTMLInputElement>('lint').checked });
     if (gen !== buildGen) return; // superseded (e.g. project switched) while submitting
     closeStream = streamEvents(job_id, async (ev) => {
       if (gen !== buildGen) return; // stale job; the UI has moved on -- never touch it
       try {
-        if (ev.type === 'queued') setStatus(`Queued (position ${ev.position})`);
-        else if (ev.type === 'step') { setStatus(`Running: ${ev.name}`); appendLog(`== ${ev.name}`); }
+        if (ev.type === 'queued') setStatus('status.queued', { n: ev.position });
+        else if (ev.type === 'step') { setStatus('status.running', { step: ev.name }); appendLog(`== ${ev.name}`); }
         else if (ev.type === 'log') appendLog(ev.line);
-        else if (ev.type === 'error') { setStatus(`Build failed: ${ev.message}`, 'err'); $<HTMLButtonElement>('build').disabled = false; }
+        else if (ev.type === 'error') { setStatus('status.buildFailed', { msg: ev.message }, 'err'); $<HTMLButtonElement>('build').disabled = false; }
         else if (ev.type === 'done') {
           renderSummary(ev);
           const data = await fetchBitstream(job_id);
@@ -301,7 +305,7 @@ async function build() {
           a.download = `${board.id}${board.bitstream_ext}`;
           a.hidden = false;
           $<HTMLButtonElement>('flash').disabled = !(board.flash === 'browser' && webUsbSupported());
-          setStatus('Build succeeded', 'ok');
+          setStatus('status.buildOk', {}, 'ok');
           $<HTMLButtonElement>('build').disabled = false;
         }
       } catch (e) {
@@ -309,14 +313,14 @@ async function build() {
         // leave the UI stuck on "Running: ..."/Build disabled forever.
         if (gen !== buildGen) return;
         const msg = e instanceof ApiError ? e.message : String((e as Error)?.message ?? e);
-        setStatus(`Build failed: ${msg}`, 'err');
+        setStatus('status.buildFailed', { msg }, 'err');
         $<HTMLButtonElement>('build').disabled = false;
       }
     });
   } catch (e) {
     if (gen !== buildGen) return;
     const msg = e instanceof ApiError ? e.message : String(e);
-    setStatus(`Build failed: ${msg}`, 'err');
+    setStatus('status.buildFailed', { msg }, 'err');
     $<HTMLButtonElement>('build').disabled = false;
   }
 }
@@ -327,13 +331,13 @@ async function doFlash() {
   const toFlash = $<HTMLInputElement>('to-flash').checked;
   const flashBtn = $<HTMLButtonElement>('flash');
   flashBtn.disabled = true;
-  setStatus('Flashing…');
+  setStatus('status.flashing');
   appendLog('== flash');
   try {
     await flash(board, data, toFlash, (t) => appendLog(t.trimEnd()));
-    setStatus(toFlash ? 'Written to flash' : 'Loaded into FPGA', 'ok');
+    setStatus(toFlash ? 'status.written' : 'status.loaded', {}, 'ok');
   } catch (e) {
-    setStatus(`Flash failed: ${(e as Error).message}`, 'err');
+    setStatus('status.flashFailed', { msg: (e as Error).message }, 'err');
     showHelp();
   } finally {
     // Re-enable only if this bitstream is still the current one (a project
@@ -350,14 +354,14 @@ function showHelp() {
 async function init() {
   boards = await fetchBoards();
   const sel = $<HTMLSelectElement>('board');
-  for (const b of boards) sel.append(new Option(`${b.description}${b.flash === 'download' ? ' (download only)' : ''}`, b.id));
+  for (const b of boards) sel.append(new Option(`${b.description}${b.flash === 'download' ? t('board.downloadOnly') : ''}`, b.id));
   if (!webUsbSupported()) {
     const banner = $('banner');
-    banner.textContent = 'This browser cannot flash boards (no WebUSB). Use Chrome or Edge, or download the bitstream.';
+    banner.textContent = t('banner.noWebUsb');
     banner.hidden = false;
   }
   sel.onchange = () => {
-    if (confirm('Start a new project for this board? (Cancel keeps the current files and just changes the target.)')) {
+    if (confirm(t('confirm.newForBoard'))) {
       void startNewProject(sel, sel.value);
     } else {
       project.board = sel.value;
@@ -378,9 +382,9 @@ async function init() {
     if (p) await openProject(p);
   };
   $('add-file').onclick = () => {
-    const name = prompt('File name (e.g. counter.v)')?.trim();
+    const name = prompt(t('prompt.fileName'))?.trim();
     if (!name) return;
-    if (!NAME_RE.test(name)) return alert('Invalid file name');
+    if (!NAME_RE.test(name)) return alert(t('alert.invalidName'));
     project.files[name] ??= '';
     scheduleSave();
     openFile(name);
@@ -404,12 +408,12 @@ async function init() {
     if (!f) return;
     try {
       const p = importZip(new Uint8Array(await f.arrayBuffer()));
-      if (!boardInfo(p.board)) throw new Error(`unknown board ${p.board}`);
+      if (!boardInfo(p.board)) throw new Error(t('err.unknownBoard', { board: p.board }));
       projectGen++;
       await store.save(p);
       await openProject(p);
     } catch (err) {
-      alert(`Import failed: ${(err as Error).message}`);
+      alert(t('alert.importFailed', { msg: (err as Error).message }));
     }
   };
 
@@ -423,4 +427,27 @@ async function init() {
   setControlsReady(true);
 }
 
-init().catch((e) => setStatus(`Failed to load: ${e}`, 'err'));
+function initLanguage() {
+  const sel = $<HTMLSelectElement>('lang');
+  for (const l of LANGS) sel.append(new Option(l.label, l.id, false, l.id === getLang()));
+  sel.onchange = () => setLang(sel.value as Lang);
+  document.documentElement.lang = getLang();
+  applyStatic();
+  onLangChange(() => {
+    applyStatic();
+    setStatus(lastStatus.key, lastStatus.vars, lastStatus.kind);
+    if (project) {
+      renderFiles();
+      showView();
+    }
+    const boardSel = $<HTMLSelectElement>('board');
+    for (const opt of Array.from(boardSel.options)) {
+      const b = boardInfo(opt.value);
+      if (b) opt.text = `${b.description}${b.flash === 'download' ? t('board.downloadOnly') : ''}`;
+    }
+    if (!$('banner').hidden) $('banner').textContent = t('banner.noWebUsb');
+  });
+}
+
+initLanguage();
+init().catch((e) => setStatus('status.loadFailed', { msg: String(e) }, 'err'));

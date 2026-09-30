@@ -18,54 +18,57 @@
       </svg>
       <div class="brand-text">
         <span class="brand-name">FPGA<span class="brand-accent">WEB</span></span>
-        <span class="label">Build · Flash · Ship</span>
+        <span class="label" data-i18n="brand.tagline">Build · Flash · Ship</span>
       </div>
     </div>
 
     <div class="group">
-      <span class="label">Project</span>
+      <span class="label" data-i18n="label.project">Project</span>
       <div class="row">
         <select id="project" aria-label="Project" disabled></select>
-        <button id="new-project" class="btn-ghost" disabled>New</button>
-        <button id="import" class="btn-ghost" disabled>Import</button>
-        <button id="export" class="btn-ghost" disabled>Export</button>
+        <button id="new-project" class="btn-ghost" disabled data-i18n="btn.new">New</button>
+        <button id="import" class="btn-ghost" disabled data-i18n="btn.import">Import</button>
+        <button id="export" class="btn-ghost" disabled data-i18n="btn.export">Export</button>
       </div>
     </div>
 
     <div class="group">
-      <span class="label">Target</span>
+      <span class="label" data-i18n="label.target">Target</span>
       <div class="row">
         <select id="board" aria-label="Board" disabled></select>
-        <label class="field"><span class="label">Top</span><input id="top" size="10" spellcheck="false" /></label>
+        <label class="field"><span class="label" data-i18n="label.top">Top</span><input id="top" size="10" spellcheck="false" /></label>
       </div>
     </div>
 
-    <button id="help" class="btn-ghost btn-icon" title="USB setup for flashing" aria-label="USB setup">USB setup</button>
+    <div class="topbar-end">
+      <button id="help" class="btn-ghost btn-icon" title="USB setup for flashing" data-i18n="btn.usbSetup" data-i18n-title="btn.usbSetup.title">USB setup</button>
+      <select id="lang" class="lang-select" aria-label="Language" data-i18n-aria="lang.aria"></select>
+    </div>
   </header>
 
   <main>
     <aside class="panel panel-files">
-      <div class="panel-head"><span class="label">Files</span></div>
+      <div class="panel-head"><span class="label" data-i18n="label.files">Files</span></div>
       <ul id="file-list"></ul>
-      <button id="add-file" class="btn-ghost btn-block" disabled>+ New file</button>
+      <button id="add-file" class="btn-ghost btn-block" disabled data-i18n="btn.newFile">+ New file</button>
     </aside>
     <section class="panel panel-editor">
       <div id="view-toggle" class="view-toggle" hidden>
-        <button id="view-board" class="seg-btn active">Board</button>
-        <button id="view-text" class="seg-btn">Text</button>
+        <button id="view-board" class="seg-btn active" data-i18n="view.board">Board</button>
+        <button id="view-text" class="seg-btn" data-i18n="view.text">Text</button>
       </div>
       <div id="editor"></div>
       <div id="planner" hidden></div>
     </section>
     <section id="output" class="panel panel-output">
-      <div class="panel-head"><span class="label">Output</span></div>
+      <div class="panel-head"><span class="label" data-i18n="label.output">Output</span></div>
       <div class="actions">
-        <button id="build" class="btn-primary" disabled>Build</button>
-        <button id="flash" class="btn-tertiary" disabled>Flash</button>
-        <a id="download" class="btn-ghost" hidden>Download</a>
+        <button id="build" class="btn-primary" disabled data-i18n="btn.build">Build</button>
+        <button id="flash" class="btn-tertiary" disabled data-i18n="btn.flash">Flash</button>
+        <a id="download" class="btn-ghost" hidden data-i18n="btn.download">Download</a>
         <span class="actions-gap"></span>
-        <label class="check"><input type="checkbox" id="lint" checked /><span>Lint</span></label>
-        <label class="check" title="Write to the board's flash memory so the design survives power-off"><input type="checkbox" id="to-flash" /><span>Persist</span></label>
+        <label class="check"><input type="checkbox" id="lint" checked /><span data-i18n="chk.lint">Lint</span></label>
+        <label class="check" title="Write to the board's flash memory so the design survives power-off" data-i18n-title="chk.persist.title"><input type="checkbox" id="to-flash" /><span data-i18n="chk.persist">Persist</span></label>
       </div>
       <div id="status">Ready</div>
       <div id="summary"></div>
@@ -73,7 +76,7 @@
     </section>
   </main>
 
-  <dialog id="setup-help" class="hex-crop"><div id="setup-help-body"></div><form method="dialog"><button class="btn-primary">Close</button></form></dialog>
+  <dialog id="setup-help" class="hex-crop"><div id="setup-help-body"></div><form method="dialog"><button class="btn-primary" data-i18n="btn.close">Close</button></form></dialog>
   <input type="file" id="import-file" accept=".zip" hidden />
   <script type="module" src="/src/main.ts"></script>
 </body>

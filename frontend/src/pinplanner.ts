@@ -4,6 +4,7 @@
 // or option.text — never innerHTML.
 
 import { BASYS3_PINS, type PinDef } from './boards/basys3-pins';
+import { onLangChange, t, type Key } from './i18n';
 import { expandBits, type PortBit, type PortScan } from './verilog-ports';
 import { generateXdc, parseXdc, type XdcModel } from './xdc';
 
@@ -12,7 +13,7 @@ type Dir = 'in' | 'out' | 'io';
 
 interface Group {
   id: string;
-  title: string;
+  title: string; // English title (tests / fallback); the UI shows t(`pp.g.${id}`)
   signals: string[];
 }
 
@@ -134,22 +135,22 @@ export class PinPlanner {
     toolbar.className = 'pp-toolbar';
     const title = document.createElement('span');
     title.className = 'pp-title';
-    title.textContent = 'Basys 3 pin planner';
+    title.dataset.i18n = 'pp.title';
     this.summary = document.createElement('span');
     this.summary.className = 'pp-summary';
     const auto = document.createElement('button');
     auto.className = 'btn-ghost';
     auto.id = 'pp-auto';
-    auto.textContent = 'Auto-assign by name';
+    auto.dataset.i18n = 'pp.auto';
     auto.onclick = () => {
       this.model.assign = autoAssign(this.bits, this.model.assign);
       this.commit();
     };
     const clear = document.createElement('button');
     clear.className = 'btn-ghost';
-    clear.textContent = 'Clear all';
+    clear.dataset.i18n = 'pp.clear';
     clear.onclick = () => {
-      if (this.model.assign.size && !confirm('Remove all pin assignments?')) return;
+      if (this.model.assign.size && !confirm(t('pp.clearConfirm'))) return;
       this.model.assign = new Map();
       this.commit();
     };
@@ -161,7 +162,7 @@ export class PinPlanner {
     this.svg.setAttribute('viewBox', '0 0 1000 640');
     this.svg.setAttribute('class', 'pp-board');
     this.svg.setAttribute('role', 'img');
-    this.svg.setAttribute('aria-label', 'Basys 3 board');
+    this.svg.dataset.i18nAria = 'pp.boardAria';
     this.svg.addEventListener('click', (e) => {
       const t = (e.target as Element).closest('[data-group]');
       if (!t) return;
@@ -174,6 +175,14 @@ export class PinPlanner {
     body.append(this.svg, this.side);
     host.append(toolbar, body);
     this.drawBoard();
+    this.relabel();
+    onLangChange(() => this.relabel());
+  }
+
+  /** Apply the current language to the static parts of the widget. */
+  private relabel(): void {
+    this.host.querySelectorAll<HTMLElement | SVGElement>('[data-i18n]').forEach((el) => (el.textContent = t(el.dataset.i18n as Key)));
+    this.svg.setAttribute('aria-label', t('pp.boardAria'));
   }
 
   /** Load the .xdc text and the top module's ports. */
@@ -226,7 +235,7 @@ export class PinPlanner {
   private drawBoard(): void {
     this.node('path', { d: 'M0 0 H968 L1000 32 V640 H0 Z', class: 'pp-pcb' });
     this.text(110, 50, 'BASYS 3', 'pp-board-name', 'start');
-    this.text(110, 70, 'Artix-7 · click a part to assign a port', 'pp-hint', 'start');
+    this.text(110, 70, t('pp.hint'), 'pp-hint', 'start').dataset.i18n = 'pp.hint';
 
     // FPGA + oscillator
     this.node('rect', { x: 470, y: 110, width: 150, height: 150, class: 'pp-chip' });
@@ -318,8 +327,8 @@ export class PinPlanner {
     const assignedBits = new Set(this.model.assign.values());
     const missing = this.bits.filter((b) => !assignedBits.has(b.bit));
     this.summary.textContent = this.bits.length
-      ? `top: ${this.top} · ${this.bits.length - missing.length}/${this.bits.length} port bits placed`
-      : `top: ${this.top} · no ports found`;
+      ? t('pp.summary', { top: this.top, placed: this.bits.length - missing.length, total: this.bits.length })
+      : t('pp.noPorts', { top: this.top });
     this.summary.classList.toggle('pp-warn', missing.length > 0 || this.warnings.length > 0);
   }
 
@@ -328,7 +337,7 @@ export class PinPlanner {
     const frag: Node[] = [];
     const h = document.createElement('div');
     h.className = 'label';
-    h.textContent = group.title;
+    h.textContent = t(`pp.g.${group.id}` as Key);
     frag.push(h);
 
     const used = new Map<string, string>();
@@ -348,22 +357,22 @@ export class PinPlanner {
       pin.textContent = this.pinOf.get(signal) ?? '';
       const sel = document.createElement('select');
       sel.setAttribute('data-signal', signal);
-      sel.setAttribute('aria-label', `Port for ${signalLabel(signal)}`);
-      sel.append(new Option('— not used —', ''));
+      sel.setAttribute('aria-label', t('pp.portFor', { sig: signalLabel(signal) }));
+      sel.append(new Option(t('pp.notUsed'), ''));
       const dir = signalDir(signal);
       const current = this.model.assign.get(signal) ?? '';
       const fits = document.createElement('optgroup');
-      fits.label = dir === 'in' ? 'Inputs' : dir === 'out' ? 'Outputs' : 'Ports';
+      fits.label = t(dir === 'in' ? 'pp.inputs' : dir === 'out' ? 'pp.outputs' : 'pp.ports');
       const others = document.createElement('optgroup');
-      others.label = 'Other ports';
+      others.label = t('pp.otherPorts');
       for (const b of this.bits) {
         const owner = used.get(b.bit);
-        const suffix = owner && owner !== signal ? `  (on ${signalLabel(owner)})` : '';
+        const suffix = owner && owner !== signal ? `  ${t('pp.onOther', { sig: signalLabel(owner) })}` : '';
         const opt = new Option(`${b.bit}${suffix}`, b.bit, false, b.bit === current);
         (dirMatches(dir, b.dir) ? fits : others).append(opt);
       }
       if (current && !this.bits.some((b) => b.bit === current)) {
-        fits.append(new Option(`${current}  (not a port of ${this.top})`, current, false, true));
+        fits.append(new Option(`${current}  ${t('pp.notPort', { top: this.top })}`, current, false, true));
       }
       if (fits.children.length) sel.append(fits);
       if (others.children.length) sel.append(others);
@@ -377,7 +386,7 @@ export class PinPlanner {
     const assignedBits = new Set(this.model.assign.values());
     const missing = this.bits.filter((b) => !assignedBits.has(b.bit));
     const notes = [...this.warnings];
-    if (missing.length) notes.push(`not placed yet: ${missing.slice(0, 12).map((b) => b.bit).join(', ')}${missing.length > 12 ? ` … (+${missing.length - 12})` : ''}`);
+    if (missing.length) notes.push(t('pp.notPlaced', { list: `${missing.slice(0, 12).map((b) => b.bit).join(', ')}${missing.length > 12 ? ` … (+${missing.length - 12})` : ''}` }));
     for (const n of notes) {
       const p = document.createElement('p');
       p.className = 'pp-note';

@@ -259,7 +259,7 @@ main {
 #planner { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
 .pp-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 14px; }
 .pp-title { font-family: var(--font-display); font-weight: 700; font-size: 1rem; }
-.pp-summary { flex: 1; font-size: 0.75rem; color: var(--hf-text-muted); font-family: var(--font-mono); }
+.pp-summary { order: 3; flex-basis: 100%; font-size: 0.75rem; color: var(--hf-text-muted); font-family: var(--font-mono); }
 .pp-summary.pp-warn { color: #F7C66B; }
 .pp-body { display: flex; flex-direction: column; gap: 2px; padding: 0 14px 14px; }
 
@@ -301,7 +301,8 @@ main {
 .panel-output { background: var(--hf-surface-container-low); }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 16px 12px; }
 .actions-gap { flex: 1; }
-.topbar #help { align-self: flex-end; }
+.topbar-end { display: flex; align-items: center; gap: 8px; align-self: flex-end; }
+.lang-select { width: auto; max-width: none; padding: 0 8px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; }
 
 #status {
   margin: 0 16px;
@@ -377,7 +378,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 16px; }
   body { min-height: 100%; }
   .topbar { align-items: stretch; gap: 12px; padding: 12px; }
   .brand { width: 100%; }
-  .topbar #help { align-self: flex-start; }
+  .topbar-end { align-self: flex-start; }
   select { max-width: 100%; }
   #project { max-width: 100%; }
   main { display: flex; flex-direction: column; gap: 2px; }
