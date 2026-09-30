@@ -637,6 +637,25 @@ export class CircuitEditor {
       case 'split': case 'merge':
         grp.append(el('rect', { x: c.type === 'split' ? -2 : W - 2, y: -6, width: 4, height: H + 12, class: 'ce-bar' }));
         break;
+      case 'and': case 'nand': case 'or': case 'nor': case 'xor': case 'xnor': case 'not': {
+        // ANSI/IEEE distinctive-shape symbols (as in Digital's default style).
+        const ys = def.pins.map((p) => p.dy * GRID);
+        const top = c.type === 'not' ? Math.min(...ys) - GRID + 2 : Math.min(...ys) - GRID / 2;
+        const bot = c.type === 'not' ? Math.max(...ys) + GRID - 2 : Math.max(...ys) + GRID / 2;
+        const outX = def.pins.find((p) => p.dir === 'out')!.dx * GRID;
+        const right = outX - (['nand', 'nor', 'xnor', 'not'].includes(c.type) ? 9 : 0); // room for the inversion bubble
+        const shape = gateShape(c.type, top, bot, right);
+        grp.append(el('path', { d: shape.body, class: 'ce-body' }));
+        if (shape.extra) grp.append(el('path', { d: shape.extra, class: 'ce-gate-line' }));
+        for (const p of def.pins) {
+          if (p.dir !== 'in') continue;
+          const y = p.dy * GRID;
+          const back = shape.backX(y);
+          if (back > 4) grp.append(el('line', { x1: 0, y1: y, x2: back, y2: y, class: 'ce-stub' }));
+        }
+        if (c.props.label) label((right) / 2, bot + 14, c.props.label, 'ce-label');
+        break;
+      }
       default: {
         body({ x: 0, y: -GRID / 2, width: W, height: H + GRID });
         label(W / 2, 14 - GRID / 2 + 4, SYMBOL[c.type] ?? (c.type === 'sub' ? c.props.circuit ?? '?' : c.type), 'ce-text');
@@ -655,8 +674,11 @@ export class CircuitEditor {
     for (const p of def.pins) {
       const x = p.dx * GRID, y = p.dy * GRID;
       if (inverted && p.dir === 'out') grp.append(el('circle', { cx: x - 5, cy: y, r: 4, class: 'ce-bubble' }));
-      const stub = p.dir === 'in' ? { x1: x, x2: x + 4 } : { x1: x - (inverted ? 9 : 4), x2: x };
-      grp.append(el('line', { ...stub, y1: y, y2: y, class: 'ce-stub' }));
+      const gate = GATES.includes(c.type) || c.type === 'not';
+      if (!(gate && p.dir === 'in')) {
+        const stub = p.dir === 'in' ? { x1: x, x2: x + 4 } : { x1: x - (inverted ? 1 : gate ? 0 : 4), x2: x };
+        if (stub.x2 > stub.x1) grp.append(el('line', { ...stub, y1: y, y2: y, class: 'ce-stub' }));
+      }
       grp.append(el('circle', { cx: x, cy: y, r: 3, class: `ce-pin ${p.bits > 1 ? 'ce-pin-bus' : ''}`, 'data-pin': p.name }));
     }
     return grp;
@@ -697,6 +719,37 @@ function el(tag: string, attrs: Record<string, string | number>): SVGElement {
   const n = document.createElementNS(NS, tag) as SVGElement;
   for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
   return n;
+}
+
+/**
+ * Distinctive-shape gate outlines inside x ∈ [0, right], y ∈ [top, bot].
+ * backX(y) is where an input line meets the (possibly curved) back of the body.
+ */
+export function gateShape(type: CompType, top: number, bot: number, right: number): { body: string; extra?: string; backX: (y: number) => number } {
+  const mid = (top + bot) / 2;
+  const h = bot - top;
+  if (type === 'not') {
+    return { body: `M0 ${top} L${right} ${mid} L0 ${bot} Z`, backX: () => 0 };
+  }
+  if (type === 'and' || type === 'nand') {
+    const r = h / 2;
+    const cx = Math.max(right * 0.35, right - r);
+    return {
+      body: `M0 ${top} H${cx} A${right - cx} ${r} 0 0 1 ${cx} ${bot} H0 Z`,
+      backX: () => 0,
+    };
+  }
+  // OR family: concave back, pointed front. XOR adds a second back curve.
+  const shift = type === 'xor' || type === 'xnor' ? 7 : 0;
+  const depth = Math.min(14, h * 0.18); // how far the back curve bulges in
+  const backAt = (y: number, x0: number) => {
+    const s = (y - top) / h;
+    return x0 + 2 * s * (1 - s) * depth * 2;
+  };
+  const body = `M${shift} ${top} Q${shift + right * 0.55} ${top} ${right} ${mid} Q${shift + right * 0.55} ${bot} ${shift} ${bot} ` +
+    `Q${shift + depth * 2} ${mid} ${shift} ${top} Z`;
+  const extra = shift ? `M0 ${top} Q${depth * 2} ${mid} 0 ${bot}` : undefined;
+  return { body, extra, backX: (y) => backAt(y, shift) };
 }
 
 function len(w: Wire): number {

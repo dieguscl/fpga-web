@@ -100,11 +100,11 @@ export function compDef(c: Comp, subs: Map<string, SubInterface> = new Map()): C
       return { type: c.type, w: 2, h: 2, pins: [{ name: 'a', dir: 'in', dx: 0, dy: 1, bits: b }, { name: 'y', dir: 'out', dx: 3, dy: 1, bits: b }] };
     case 'and': case 'or': case 'nand': case 'nor': case 'xor': case 'xnor': {
       const n = Math.min(4, Math.max(2, c.props.inputs ?? 2));
-      const h = n <= 2 ? 2 : n;
-      const ins: PinDef[] = [];
-      for (let i = 0; i < n; i++) ins.push({ name: `in${i}`, dir: 'in', dx: 0, dy: n === 2 ? i * 2 : i, bits: b });
-      const outY = n === 2 ? 1 : Math.floor((n - 1) / 2);
-      return { type: c.type, w: 3, h, pins: [...ins, { name: 'y', dir: 'out', dx: 3, dy: outY, bits: b }] };
+      // Inputs placed symmetrically around the output so gate symbols stay symmetric.
+      const ys = n === 2 ? [0, 2] : n === 3 ? [0, 1, 2] : [0, 1, 3, 4];
+      const outY = n === 4 ? 2 : 1;
+      const ins: PinDef[] = ys.map((dy, i) => ({ name: `in${i}`, dir: 'in', dx: 0, dy, bits: b }));
+      return { type: c.type, w: 3, h: ys[ys.length - 1], pins: [...ins, { name: 'y', dir: 'out', dx: 3, dy: outY, bits: b }] };
     }
     case 'mux': {
       const sel = Math.min(2, Math.max(1, c.props.sel ?? 1));

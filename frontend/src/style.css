@@ -333,7 +333,7 @@ main {
 .ce-canvas { width: 100%; height: 100%; min-height: 360px; background: var(--hf-surface-dim); outline: none; touch-action: none; user-select: none; }
 .ce-canvas:focus-visible { box-shadow: inset 0 0 0 1px var(--hf-primary); }
 .ce-dot { fill: var(--hf-text-faint); }
-.ce-problems { margin: 8px 14px 12px; display: flex; flex-direction: column; gap: 2px; }
+.ce-problems { margin: 8px 14px 12px; display: flex; flex-direction: column; gap: 2px; max-height: 84px; overflow: auto; flex: none; }
 .ce-problem { font-family: var(--font-mono); font-size: 0.75rem; color: var(--hf-error); }
 .ce-problem-warn { color: var(--syn-number); }
 
@@ -373,6 +373,8 @@ main {
 .ce-led.ce-led-on { fill: #FF5B55; filter: drop-shadow(0 0 6px #FF5B55); }
 .ce-bubble { fill: var(--hf-surface-container-highest); stroke: var(--hf-text-secondary); stroke-width: 1.5; }
 .ce-stub { stroke: var(--hf-text-secondary); stroke-width: 1.5; }
+.ce-gate-line { fill: none; stroke: var(--hf-text-secondary); stroke-width: 1.5; }
+.ce-comp.ce-sel .ce-gate-line { stroke: #F7C66B; }
 .ce-pin { fill: var(--hf-text-secondary); cursor: crosshair; }
 .ce-pin-bus { fill: var(--hf-tertiary); }
 .ce-pin:hover { fill: var(--hf-primary); r: 5; }
