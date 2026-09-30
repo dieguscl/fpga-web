@@ -609,3 +609,64 @@ button[data-icon] { display: inline-flex; align-items: center; justify-content: 
 #share-body > button { align-self: flex-start; }
 .log-action { margin: 4px 0; padding: 0; border: 0; background: none; color: var(--hf-text-muted); font: inherit; text-decoration: underline; cursor: pointer; }
 .log-action:hover:not(:disabled) { color: var(--hf-error); }
+
+/* ── Phones: one panel at a time + bottom tab bar ──────────────────────── */
+.mobile-nav { display: none; }
+@media (max-width: 720px) {
+  html, body { height: 100%; }
+  body { height: 100dvh; min-height: 0; overflow: hidden; }
+
+  /* compact header: brand + icons on one line, project and target rows below */
+  .topbar { position: relative; display: grid; grid-template-columns: 1fr; gap: 8px; padding: 10px 12px; }
+  .brand { width: auto; }
+  .brand-mark { width: 26px; height: 26px; }
+  .brand-name { font-size: 1.05rem; }
+  .brand-text .label { display: none; }
+  .topbar-end { position: absolute; top: 8px; right: 12px; }
+  .topbar .group > .label, .topbar .field > .label { display: none; }
+  .topbar > * { min-width: 0; }
+  .topbar .row { flex-wrap: nowrap; gap: 6px; }
+  #project, #board { flex: 1; min-width: 0; max-width: none; }
+  #top { width: 92px; }
+  .topbar .field { flex: none; }
+
+  main { flex: 1; min-height: 0; display: block; overflow: hidden; }
+  main > .panel { display: none; height: 100%; min-height: 0; max-height: none; overflow: auto; }
+  body[data-mview="files"] .panel-files,
+  body[data-mview="output"] .panel-output { display: flex; }
+  body[data-mview="editor"] .panel-editor { display: flex; }
+  .panel-files button.btn-block { flex: none; height: 44px; margin: 6px 12px 0; width: auto; }
+  #file-list li { padding: 12px 12px; font-size: 0.875rem; }
+  #file-list li button { opacity: 1; padding: 4px 8px; }
+  .panel-output #log { flex: 1; max-height: none; min-height: 0; }
+  .actions { padding: 0 12px 10px; }
+
+  .mobile-nav {
+    display: grid; grid-template-columns: repeat(3, 1fr); flex: none;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--hf-surface-container-low); border-top: 1px solid var(--hf-outline-variant);
+  }
+  .mobile-nav button {
+    display: flex; flex-direction: column; gap: 2px; height: 56px; border: 0; background: none;
+    color: var(--hf-text-muted); font-size: 0.6875rem;
+  }
+  .mobile-nav button .btn-ico { width: 20px; height: 20px; }
+  .mobile-nav button.active { color: var(--hf-primary); box-shadow: inset 0 2px 0 var(--hf-primary); }
+
+  /* circuit editor: palette becomes a short scrollable strip above a big canvas */
+  .ce-body { display: flex; flex-direction: column; margin: 0 8px; }
+  .ce-side { max-height: 28vh; flex: none; }
+  .ce-canvas { min-height: 0; }
+  .ce-toolbar { padding: 8px; gap: 6px 8px; }
+  .ce-tools .btn-icon-only { width: 36px; height: 36px; }
+
+  /* waveform: narrower names so the waves get the room */
+  .wv-main { grid-template-columns: minmax(130px, 42%) minmax(0, 1fr); margin: 0 8px 8px; }
+  .wv-name select { display: none; }
+  .wv-toolbar { padding: 8px; }
+  .wv-cursor-label { order: 5; flex-basis: 100%; }
+  .wv-title { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .vb-board { width: calc(100% - 16px); margin: 0 8px 8px; }
+}
+.vb-hit { fill: transparent; stroke: none; pointer-events: all; }

@@ -309,3 +309,27 @@ test('share link: create, open a copy elsewhere, report, delete', async ({ page,
   await expect(p3.locator('#status')).toContainText('does not exist or has expired');
   await other.close();
 });
+
+// Same file as the other tests: they share one client IP, and the server runs one build per IP at a time.
+test.describe('phone layout', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  test('phone: one panel at a time, no sideways scroll, panels follow the workflow', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#mobile-nav')).toBeVisible();
+    await expect(page.locator('.panel-editor')).toBeVisible();
+    await expect(page.locator('.panel-files')).toBeHidden();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await expect(page.locator('#share')).toBeInViewport();
+    await expect(page.locator('#top')).toBeInViewport();
+
+    await page.locator('[data-mview="files"]').click();
+    await expect(page.locator('.panel-files')).toBeVisible();
+    await page.locator('#file-list li', { hasText: 'blinky_tb.v' }).click(); // picking a file shows the editor
+    await expect(page.locator('.panel-editor')).toBeVisible();
+
+    await page.locator('[data-mview="output"]').click();
+    await page.click('#simulate'); // results come back in the editor (waveform)
+    await expect(page.locator('#wave')).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator('.panel-output')).toBeHidden();
+  });
+});

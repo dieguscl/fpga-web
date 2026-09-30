@@ -215,6 +215,7 @@ export class VirtualBoard {
     for (const b of BUTTONS) {
       const [x, y] = pos[b];
       const g = this.el('g', { class: 'vb-btn', 'data-signal': b, transform: `translate(${x} ${y})` });
+      this.el('circle', { cx: 0, cy: 0, r: 30, class: 'vb-hit' }, g); // finger-sized, no overlap (60 apart)
       this.el('circle', { cx: 0, cy: 0, r: 24, class: 'vb-btn-cap' }, g);
       this.text(0, 44, b.replace('btn', 'BTN'), 'vb-label', g);
       const press = (v: number) => (e: PointerEvent) => {
@@ -235,6 +236,7 @@ export class VirtualBoard {
       this.ledEls[i] = this.el('rect', { x, y: 380, width: 24, height: 14, rx: 2, class: 'vb-led' });
       this.text(x + 12, 412, `LD${i}`, 'vb-label');
       const g = this.el('g', { class: 'vb-sw', 'data-signal': `sw[${i}]`, transform: `translate(${x} 440)` }) as SVGGElement;
+      this.el('rect', { x: -13, y: -30, width: 50, height: 124, class: 'vb-hit' }, g); // finger-sized target
       this.el('rect', { x: 0, y: 0, width: 24, height: 60, class: 'vb-sw-slot' }, g);
       this.el('rect', { x: 3, y: 33, width: 18, height: 24, class: 'vb-sw-knob' }, g);
       this.text(12, 80, `SW${i}`, 'vb-label', g);

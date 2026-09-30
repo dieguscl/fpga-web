@@ -66,6 +66,8 @@ export class CircuitEditor {
   private view = { x: 20, y: 20, k: 1 };
   private hover: Pt = { x: 0, y: 0 };
   private pointerInside = false;
+  private touches = new Map<number, { x: number; y: number }>(); // active touch points (two = pan/pinch)
+  private pinch: { d0: number; k0: number; cx0: number; cy0: number; vx0: number; vy0: number } | null = null;
   private subs = new Map<string, SubInterface>();
   private netlist: Netlist | null = null;
 
@@ -358,7 +360,52 @@ export class CircuitEditor {
       }
     }, { passive: false });
 
+    // Two fingers: pan and pinch-zoom (cancels whatever the first finger started).
+    const touchPoint = (e: PointerEvent) => {
+      const r = this.svg.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    const startPinch = () => {
+      const [a, b] = [...this.touches.values()];
+      const d = this.drag;
+      if (d?.kind === 'move' && d.moved) this.circ = d.orig; // undo a half-done drag
+      this.drag = null;
+      this.pinch = { d0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), k0: this.view.k, cx0: (a.x + b.x) / 2, cy0: (a.y + b.y) / 2,
+        vx0: this.view.x, vy0: this.view.y };
+      this.render();
+    };
     this.svg.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
+      this.touches.set(e.pointerId, touchPoint(e));
+      if (this.touches.size === 2) startPinch();
+    }, { capture: true });
+    this.svg.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'touch' || !this.touches.has(e.pointerId)) return;
+      this.touches.set(e.pointerId, touchPoint(e));
+      const p = this.pinch;
+      if (!p || this.touches.size < 2) return;
+      e.stopImmediatePropagation();
+      const [a, b] = [...this.touches.values()];
+      const k = Math.min(4, Math.max(0.25, p.k0 * Math.hypot(a.x - b.x, a.y - b.y) / p.d0));
+      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      this.view.k = k;
+      this.view.x = cx - ((p.cx0 - p.vx0) * k) / p.k0;
+      this.view.y = cy - ((p.cy0 - p.vy0) * k) / p.k0;
+      this.applyView();
+    }, { capture: true });
+    const touchEnd = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      this.touches.delete(e.pointerId);
+      if (this.pinch) {
+        e.stopImmediatePropagation(); // don't finish a click/box with the lifted finger
+        if (this.touches.size === 0) this.pinch = null;
+      }
+    };
+    this.svg.addEventListener('pointerup', touchEnd, { capture: true });
+    this.svg.addEventListener('pointercancel', touchEnd, { capture: true });
+
+    this.svg.addEventListener('pointerdown', (e) => {
+      if (this.pinch || this.touches.size > 1) return;
       this.svg.focus();
       const g = this.toGrid(e);
       if (e.button === 1 || e.button === 2 || (e.button === 0 && e.altKey)) {

@@ -104,18 +104,50 @@ export class WaveformViewer {
 
     let downX: number | null = null;
     let downT0 = 0;
+    // Two fingers pinch-zoom the time axis around their midpoint.
+    const touches = new Map<number, number>();
+    let pinch: { d0: number; s0: number; tMid: number } | null = null;
+    const offX = (e: PointerEvent) => e.clientX - this.canvas.getBoundingClientRect().left;
     this.canvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') {
+        touches.set(e.pointerId, offX(e));
+        if (touches.size === 2) {
+          const [a, b] = [...touches.values()];
+          pinch = { d0: Math.max(1, Math.abs(a - b)), s0: this.scale, tMid: this.t0 + (a + b) / 2 / this.scale };
+          downX = null;
+          return;
+        }
+      }
+      if (pinch) return;
       downX = e.clientX;
       downT0 = this.t0;
       this.canvas.setPointerCapture(e.pointerId);
     });
     this.canvas.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch' && touches.has(e.pointerId)) touches.set(e.pointerId, offX(e));
+      if (pinch && touches.size >= 2) {
+        const [a, b] = [...touches.values()];
+        const minScale = this.wrap.clientWidth / Math.max(1, this.vcd?.endTime ?? 1) / 2;
+        this.scale = Math.min(Math.max(pinch.s0 * Math.max(1, Math.abs(a - b)) / pinch.d0, minScale), 400);
+        this.t0 = pinch.tMid - (a + b) / 2 / this.scale;
+        this.clamp();
+        this.draw();
+        return;
+      }
       if (downX === null) return;
       this.t0 = downT0 - (e.clientX - downX) / this.scale;
       this.clamp();
       this.draw();
     });
+    const lift = (e: PointerEvent) => {
+      touches.delete(e.pointerId);
+      if (touches.size === 0) pinch = null;
+    };
+    this.canvas.addEventListener('pointercancel', (e) => { lift(e); downX = null; });
     this.canvas.addEventListener('pointerup', (e) => {
+      const wasPinch = pinch !== null;
+      lift(e);
+      if (wasPinch) { downX = null; return; }
       if (downX !== null && Math.abs(e.clientX - downX) < 4) {
         this.cursor = Math.max(0, this.t0 + e.offsetX / this.scale);
         this.renderValues();

@@ -8,7 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 29 9.5v13L16 30 3 22.5v-13z' fill='%2369F6B8'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
-<body>
+<body data-mview="editor">
   <header class="topbar">
     <div class="brand">
       <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
@@ -90,6 +90,11 @@
       <pre id="log"></pre>
     </section>
   </main>
+  <nav id="mobile-nav" class="mobile-nav" aria-label="Panels">
+    <button data-mview="files" data-icon="files" data-i18n="label.files">Files</button>
+    <button data-mview="editor" data-icon="code" data-i18n="mview.editor">Editor</button>
+    <button data-mview="output" data-icon="terminal" data-i18n="label.output">Output</button>
+  </nav>
 
   <dialog id="settings-dialog">
     <h3 data-i18n="settings.title">Settings</h3>

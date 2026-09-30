@@ -300,7 +300,19 @@ function showView() {
   }
 }
 
+/** Phones show one panel at a time (bottom tab bar); desktop ignores this. */
+type MobileView = 'files' | 'editor' | 'output';
+function setMobileView(v: MobileView) {
+  document.body.dataset.mview = v;
+  document.querySelectorAll<HTMLButtonElement>('#mobile-nav [data-mview]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.mview === v);
+    b.setAttribute('aria-current', String(b.dataset.mview === v));
+  });
+  if (v === 'editor') window.dispatchEvent(new Event('resize')); // canvases size themselves on show
+}
+
 function openFile(name: string) {
+  setMobileView('editor');
   currentFile = name;
   mainTab = 'code';
   // No files left (name === ''): show an empty, read-only editor instead of
@@ -436,6 +448,7 @@ function enableRun() {
 
 async function build() {
   resetOutput(); // closes any previous stream and bumps buildGen
+  setMobileView('output');
   fixTypographyInProject();
   const gen = buildGen; // this build's token: events checked against it below are dropped once stale
   const board = boardInfo(project.board)!;
@@ -520,6 +533,7 @@ async function simulate() {
     return;
   }
   resetOutput();
+  setMobileView('output');
   fixTypographyInProject();
   const gen = buildGen;
   scheduleSave();
@@ -546,6 +560,7 @@ async function simulate() {
           const vcd = parseVcd(text);
           $('tab-wave').hidden = false;
           mainTab = 'wave';
+          setMobileView('editor');
           showView();
           waveViewer.load(vcd, tb);
           setStatus('status.simOk', {}, 'ok');
@@ -675,6 +690,10 @@ async function init() {
     scheduleSave();
     openFile(name);
   };
+  document.querySelectorAll<HTMLButtonElement>('#mobile-nav [data-mview]').forEach((b) => {
+    b.onclick = () => setMobileView(b.dataset.mview as MobileView);
+  });
+  setMobileView('editor');
   $('build').onclick = build;
   $('flash').onclick = doFlash;
   $('help').onclick = showHelp;
