@@ -1,5 +1,6 @@
 """Validate and normalise a build request's files before anything touches disk."""
 
+import json
 import re
 
 from fpgaweb.boards import CONSTRAINT_EXTS, Board
@@ -116,3 +117,43 @@ def validate_design_files(top: str, files: dict[str, str]) -> dict[str, str]:
     if not any(_ext(n) in DESIGN_EXTS and not is_testbench(n) for n in out):
         raise ValidationError("project has no Verilog design source (.v or .sv)")
     return out
+
+
+SHARE_EXTS = ALLOWED_EXTS | {".circ"}
+
+
+def validate_share(project: object, board_ids: set[str], max_bytes: int) -> dict:
+    """A shareable project: name, known board, top and text files of project types only."""
+    if not isinstance(project, dict):
+        raise ValidationError("project must be an object")
+    name, board, top, files = (project.get(k) for k in ("name", "board", "top", "files"))
+    if not isinstance(name, str) or not NAME_RE.fullmatch(name):
+        raise ValidationError("invalid project name")
+    if board not in board_ids:
+        raise ValidationError("unknown board")
+    if not isinstance(top, str) or len(top) > 128:
+        raise ValidationError("invalid top module")
+    if not isinstance(files, dict) or not files:
+        raise ValidationError("project has no files")
+    if len(files) > MAX_FILES:
+        raise ValidationError(f"a project can have at most {MAX_FILES} files")
+    total = 0
+    for fname, text in files.items():
+        if not isinstance(fname, str) or not NAME_RE.fullmatch(fname):
+            raise ValidationError(f"invalid file name: {fname!r}")
+        if _ext(fname) not in SHARE_EXTS or _raw_ext(fname) != _ext(fname):
+            raise ValidationError(f"file type cannot be shared: {fname!r}")
+        if not isinstance(text, str) or "\x00" in text:
+            raise ValidationError(f"{fname} is not a text file")
+        try:
+            total += len(text.encode("utf-8"))
+        except UnicodeEncodeError:
+            raise ValidationError(f"{fname} is not valid UTF-8")
+        if _ext(fname) == ".circ":
+            try:
+                json.loads(text)
+            except ValueError:
+                raise ValidationError(f"{fname} is not a valid circuit")
+    if total > max_bytes:
+        raise ValidationError(f"project is too large to share ({total // 1000} KB; limit {max_bytes // 1000} KB) - export a .zip instead")
+    return {"name": name, "board": board, "top": top, "files": dict(files)}

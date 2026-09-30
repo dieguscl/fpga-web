@@ -1,11 +1,12 @@
 """HTTP API: boards, build submission, SSE job events, bitstream download, SPA."""
 
 import asyncio
+import logging
 import ipaddress
 import json
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -15,7 +16,8 @@ from fpgaweb.config import Settings
 from fpgaweb.flash import flash_plan
 from fpgaweb.jobs import JobManager, QueueFull
 from fpgaweb.ratelimit import RateLimiter
-from fpgaweb.validation import ValidationError, validate_design_files, validate_files, validate_sim_files
+from fpgaweb.shares import ShareError, ShareStore
+from fpgaweb.validation import ValidationError, validate_design_files, validate_files, validate_share, validate_sim_files
 
 MAX_BODY = 2_000_000
 
@@ -25,6 +27,11 @@ class BuildBody(BaseModel):
     top: str
     files: dict[str, str]
     lint: bool = True
+
+
+class ShareBody(BaseModel):
+    project: dict
+    turnstile: str = ""
 
 
 class NetlistBody(BaseModel):
@@ -157,14 +164,49 @@ def _board_json(b: Board) -> dict:
             "flash": fp.mode, "ofl_args": fp.args, "writes_flash": fp.writes_flash}
 
 
+log = logging.getLogger("fpgaweb.shares")
+NOINDEX = {"X-Robots-Tag": "noindex, nofollow"}
+
+
+async def _share_maintenance(shares: ShareStore, backup_dir) -> None:
+    """Hourly: drop links not opened for share_ttl_days; daily: back up the database."""
+    last_backup = 0.0
+    while True:
+        try:
+            n = await asyncio.to_thread(shares.purge_expired)
+            if n:
+                log.info("purged %d expired share(s)", n)
+            if asyncio.get_running_loop().time() - last_backup > 86400 or not last_backup:
+                await asyncio.to_thread(shares.backup, backup_dir)
+                last_backup = asyncio.get_running_loop().time()
+        except Exception:  # never let maintenance kill the app
+            log.exception("share maintenance failed")
+        await asyncio.sleep(3600)
+
+
+async def _turnstile_ok(secret: str, token: str, ip: str) -> bool:
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.post("https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                             data={"secret": secret, "response": token, "remoteip": ip})
+            return bool(r.json().get("success"))
+    except (httpx.HTTPError, ValueError):
+        return False
+
+
 def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
-               limiter: RateLimiter) -> FastAPI:
+               limiter: RateLimiter, shares: ShareStore | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         await manager.start()
+        maint = asyncio.create_task(_share_maintenance(shares, settings.shares_backup_dir)) if shares else None
         try:
             yield
         finally:
+            if maint:
+                maint.cancel()
             await manager.stop()
 
     app = FastAPI(title="FPGA Web IDE", lifespan=lifespan, docs_url=None, redoc_url=None)
@@ -328,6 +370,76 @@ def create_app(settings: Settings, registry: BoardRegistry, manager: JobManager,
         return FileResponse(p, media_type="application/octet-stream",
                             filename=f"{job.board.id}{job.board.bitstream_ext}")
 
+    # ── Share links ──
+    share_hour = RateLimiter(settings.share_rate_hour, 3600)
+    share_day = RateLimiter(settings.share_rate_day, 86400)
+    share_open = RateLimiter(settings.share_open_rate_n, 600)
+    board_ids = {b.id for b in registry.all()}
+    turnstile = bool(settings.turnstile_sitekey and settings.turnstile_secret)
+
+    @app.get("/api/config")
+    async def config() -> dict:
+        return {"shares": shares is not None, "turnstile_sitekey": settings.turnstile_sitekey if turnstile else ""}
+
+    def shares_or_404() -> ShareStore:
+        if shares is None:
+            raise HTTPException(404, "sharing is not enabled on this server")
+        return shares
+
+    @app.post("/api/shares", status_code=201)
+    async def create_share(body: ShareBody, request: Request):
+        store = shares_or_404()
+        try:
+            project = validate_share(body.project, board_ids, settings.share_max_bytes)
+        except ValidationError as e:
+            raise HTTPException(400, str(e))
+        ip = client_ip(request)
+        if turnstile and not await _turnstile_ok(settings.turnstile_secret, body.turnstile, ip):
+            raise HTTPException(403, "human check failed; reload the page and try again")
+        for lim, what in ((share_hour, "hour"), (share_day, "day")):
+            if not lim.allow(ip):
+                raise HTTPException(429, f"too many share links this {what}; try again later",
+                                    headers={"Retry-After": str(lim.retry_after(ip))})
+        try:
+            created = await asyncio.to_thread(store.create, project, ip)
+        except ShareError as e:
+            raise HTTPException(503 if "full" in str(e) else 403, str(e))
+        return {"id": created.id, "delete_key": created.delete_key}
+
+    @app.get("/api/shares/{sid}")
+    async def get_share(sid: str, request: Request):
+        store = shares_or_404()
+        ip = client_ip(request)
+        if not share_open.allow(ip):
+            raise HTTPException(429, "too many requests; slow down", headers={"Retry-After": str(share_open.retry_after(ip))})
+        p = await asyncio.to_thread(store.get, sid) if sid.isalnum() and len(sid) <= 16 else None
+        if p is None:
+            raise HTTPException(404, "this link does not exist or has expired", headers=NOINDEX)
+        return JSONResponse(p, headers=NOINDEX)
+
+    @app.delete("/api/shares/{sid}", status_code=204)
+    async def delete_share(sid: str, x_delete_key: str = Header("")):
+        store = shares_or_404()
+        if not await asyncio.to_thread(store.delete, sid, x_delete_key):
+            raise HTTPException(404, "no such link, or wrong delete key")
+
+    @app.post("/api/shares/{sid}/report", status_code=204)
+    async def report_share(sid: str, request: Request):
+        store = shares_or_404()
+        ip = client_ip(request)
+        if not share_open.allow(ip):
+            raise HTTPException(429, "too many requests; slow down")
+        if not await asyncio.to_thread(store.report, sid):
+            raise HTTPException(404, "no such link")
+        log.warning("share %s reported", sid)
+
     if settings.static_dir is not None:
+        index = settings.static_dir / "index.html"
+
+        @app.get("/s/{sid}")
+        async def share_page(sid: str):
+            # The IDE itself opens the link (it reads /s/<id> from the URL); never indexed.
+            return FileResponse(index, media_type="text/html", headers=NOINDEX)
+
         app.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="spa")
     return app

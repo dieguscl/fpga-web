@@ -112,3 +112,34 @@ export async function fetchBitstream(jobId: string): Promise<Uint8Array> {
   if (!r.ok) throw new ApiError(r.status, 'bitstream not available (expired?)');
   return new Uint8Array(await r.arrayBuffer());
 }
+
+// ── Share links ──
+
+export interface ShareProject {
+  name: string;
+  board: string;
+  top: string;
+  files: Record<string, string>;
+}
+
+async function noContent(r: Response): Promise<void> {
+  if (!r.ok) await json(r); // throws ApiError with the server's detail
+}
+
+export const fetchConfig = () =>
+  fetch('/api/config').then((r) => json<{ shares: boolean; turnstile_sitekey: string }>(r));
+
+export const createShare = (project: ShareProject, turnstile = '') =>
+  fetch('/api/shares', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project, turnstile }),
+  }).then((r) => json<{ id: string; delete_key: string | null }>(r));
+
+export const fetchShare = (id: string) => fetch(`/api/shares/${encodeURIComponent(id)}`).then((r) => json<ShareProject>(r));
+
+export const deleteShare = (id: string, key: string) =>
+  fetch(`/api/shares/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'X-Delete-Key': key } }).then(noContent);
+
+export const reportShare = (id: string) =>
+  fetch(`/api/shares/${encodeURIComponent(id)}/report`, { method: 'POST' }).then(noContent);

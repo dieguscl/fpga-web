@@ -597,3 +597,15 @@ button[data-icon] { display: inline-flex; align-items: center; justify-content: 
 .wv-bit .wv-name-label { color: var(--hf-text-secondary); }
 .btn-warn { color: var(--hf-warning, #D98E04); }
 .btn-warn:hover:not(:disabled) { color: var(--hf-warning, #D98E04); }
+/* ── Share ─────────────────────────────────────────────────────────────── */
+#share-dialog { width: min(560px, calc(100vw - 32px)); }
+#share-body { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+#share-body p { margin: 0; }
+.share-row { display: flex; gap: 8px; }
+.share-row input { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 0.8125rem; }
+.share-err { color: var(--hf-error) !important; }
+.share-small, .share-prev { font-size: 0.75rem !important; overflow-wrap: anywhere; }
+.share-status:empty { display: none; }
+#share-body > button { align-self: flex-start; }
+.log-action { margin: 4px 0; padding: 0; border: 0; background: none; color: var(--hf-text-muted); font: inherit; text-decoration: underline; cursor: pointer; }
+.log-action:hover:not(:disabled) { color: var(--hf-error); }

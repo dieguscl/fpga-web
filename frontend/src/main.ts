@@ -6,11 +6,12 @@ import '@fontsource/inter/600.css';
 import '@fontsource/inter/700.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/700.css';
-import { ApiError, fetchBitstream, fetchNetlist, fetchWave, submitNetlist, submitSim, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent } from './api';
+import { ApiError, fetchBitstream, fetchNetlist, fetchWave, submitNetlist, submitSim, fetchBoards, fetchTemplate, streamEvents, submitBuild, type BoardInfo, type BuildEvent, fetchConfig, fetchShare, reportShare } from './api';
 import { Editor, plainQuotes, vimEnabled } from './editor';
 import { parseLocations } from './errors';
 import { applyTheme, getTheme, onThemeChange, setTheme, type ThemeChoice } from './theme';
 import { decorateIcons } from './icons';
+import { ShareDialog, shareIdFromPath } from './share';
 import { applyStatic, getLang, LANGS, onLangChange, setLang, t, type Key, type Lang } from './i18n';
 import { PinPlanner } from './pinplanner';
 import { findModulePorts } from './verilog-ports';
@@ -91,7 +92,7 @@ function boardInfo(id: string): BoardInfo | undefined {
 // own openProject() call lands afterwards. Playwright (and real users)
 // naturally wait for a control to become enabled before interacting with
 // it, so this serializes interaction after the bootstrap deterministically.
-const GATED_CONTROLS = ['board', 'new-project', 'project', 'import', 'export', 'add-file', 'new-tb', 'new-circuit', 'build', 'simulate'];
+const GATED_CONTROLS = ['board', 'new-project', 'project', 'import', 'export', 'share', 'add-file', 'new-tb', 'new-circuit', 'build', 'simulate'];
 function setControlsReady(ready: boolean) {
   for (const id of GATED_CONTROLS) ($(id) as HTMLButtonElement | HTMLSelectElement).disabled = !ready;
 }
@@ -585,6 +586,42 @@ async function doFlash() {
   }
 }
 
+/** Open a /s/<id> link: save a copy of the shared project in this browser. Returns an error message, or null. */
+async function openSharedLink(id: string): Promise<string | null> {
+  history.replaceState(null, '', '/'); // the copy is now a normal local project
+  try {
+    const sp = await fetchShare(id);
+    if (!boardInfo(sp.board)) throw new Error(t('err.unknownBoard', { board: sp.board }));
+    const names = new Set((await store.list()).map((p) => p.name));
+    let name = sp.name;
+    for (let i = 2; names.has(name); i++) name = `${sp.name}-${i}`;
+    const p: Project = { id: crypto.randomUUID(), name, board: sp.board, top: sp.top, files: sp.files, updatedAt: Date.now() };
+    fixTypography(p);
+    projectGen++;
+    await store.save(p);
+    await openProject(p);
+    appendLog(t('share.opened', { name }));
+    const report = document.createElement('button');
+    report.className = 'log-action';
+    report.textContent = t('share.report');
+    report.onclick = async () => {
+      if (!confirm(t('share.reportConfirm'))) return;
+      report.disabled = true;
+      try {
+        await reportShare(id);
+        report.textContent = t('share.reported');
+      } catch (e) {
+        report.disabled = false;
+        alert(e instanceof ApiError ? e.message : String(e));
+      }
+    };
+    $('log').append(report, '\n');
+    return null;
+  } catch (e) {
+    return e instanceof ApiError ? e.message : String((e as Error)?.message ?? e);
+  }
+}
+
 function showNoWebUsb() {
   const p = document.createElement('p');
   p.textContent = t('banner.noWebUsb');
@@ -675,13 +712,25 @@ async function init() {
     }
   };
 
-  const existing = await store.list();
-  if (existing.length) {
+  const config = await fetchConfig().catch(() => ({ shares: false, turnstile_sitekey: '' }));
+  if (config.shares) {
+    const dlg = new ShareDialog($<HTMLDialogElement>('share-dialog'), $('share-body'), config.turnstile_sitekey);
+    $('share').hidden = false;
+    $('share').onclick = () => { flushSave(); dlg.open(project); };
+  }
+  const sharedId = shareIdFromPath();
+  const sharedErr = sharedId !== null ? await openSharedLink(sharedId) : null;
+  const sharedOk = sharedId !== null && sharedErr === null;
+  const existing = sharedOk ? [] : await store.list();
+  if (sharedOk) {
+    /* already open */
+  } else if (existing.length) {
     projectGen++;
     await openProject(existing[0]);
   } else {
     await createProject('basys3', 'basys3-blinky');
   }
+  if (sharedErr) setStatus('share.openFailed', { msg: sharedErr }, 'err');
   setControlsReady(true);
 }
 

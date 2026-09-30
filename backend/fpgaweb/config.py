@@ -36,6 +36,17 @@ class Settings:
     rate_window_s: int = 600
     sse_ping_s: int = 15
     max_vcd_bytes: int = 20 * 1024**2
+    # Share links (see shares.py)
+    shares_db: Path = Path("/var/lib/fpgaweb/shares/shares.db")
+    shares_backup_dir: Path = Path("/var/lib/fpgaweb/shares/backups")
+    share_max_bytes: int = 200_000  # uncompressed project text
+    share_quota_bytes: int = 500 * 1024**2  # all stored shares (compressed)
+    share_ttl_days: int = 180  # deleted after this long without being opened
+    share_rate_hour: int = 10
+    share_rate_day: int = 30
+    share_open_rate_n: int = 120  # opens per 10 minutes per IP
+    turnstile_sitekey: str = ""  # Cloudflare Turnstile; both set = required when creating links
+    turnstile_secret: str = ""
 
 
 def _coerce(name: str, raw: str):

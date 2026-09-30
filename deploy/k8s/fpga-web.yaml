@@ -15,6 +15,19 @@ spec:
     requests:
       storage: 5Gi
 ---
+# Share links (SQLite + nightly backups). Deleting this PVC deletes every shared link.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shares
+  namespace: fpga-web
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -71,11 +84,14 @@ spec:
           volumeMounts:
             - {name: chipdb, mountPath: /var/lib/fpgaweb/chipdb}
             - {name: jobs, mountPath: /var/lib/fpgaweb/jobs}
+            - {name: shares, mountPath: /var/lib/fpgaweb/shares}
       volumes:
         - name: chipdb
           persistentVolumeClaim: {claimName: chipdb}
         - name: jobs
           emptyDir: {sizeLimit: 4Gi}
+        - name: shares
+          persistentVolumeClaim: {claimName: shares}
 ---
 apiVersion: v1
 kind: Service

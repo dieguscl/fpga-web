@@ -42,7 +42,7 @@ COPY backend/ /app/backend/
 RUN python3 -m venv /app/venv && /app/venv/bin/pip install --no-cache-dir '/app/backend[dev]'
 COPY --from=web /web/dist /app/web
 RUN useradd --system --uid 10001 --home /var/lib/fpgaweb fpgaweb \
- && mkdir -p /var/lib/fpgaweb/jobs /var/lib/fpgaweb/chipdb \
+ && mkdir -p /var/lib/fpgaweb/jobs /var/lib/fpgaweb/chipdb /var/lib/fpgaweb/shares \
  && chown -R fpgaweb /var/lib/fpgaweb
 ENV FPGAWEB_STATIC_DIR=/app/web FPGAWEB_TRUST_PROXY=true
 USER fpgaweb

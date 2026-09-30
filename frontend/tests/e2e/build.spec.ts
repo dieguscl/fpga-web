@@ -273,3 +273,39 @@ test('without WebUSB: no banner, USB setup and Flash disabled, warning icon expl
   await page.click('#usb-warn');
   await expect(page.locator('#setup-help')).toContainText('WebUSB');
 });
+
+test('share link: create, open a copy elsewhere, report, delete', async ({ page, browser, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  await page.selectOption('#board', 'basys3');
+  page.once('dialog', (d) => d.accept(`shared-${Date.now()}`));
+  await page.click('#new-project');
+  await expect(page.locator('#file-list')).toContainText('blinky.v');
+  await page.click('#share');
+  await expect(page.locator('#share-dialog')).toContainText('Anyone with the link');
+  await page.click('#share-create');
+  const url = await page.locator('#share-url').inputValue();
+  expect(url).toMatch(/\/s\/[A-Za-z0-9]{10}$/);
+  await page.getByRole('button', { name: 'Copy' }).click();
+  await expect(page.locator('#share-dialog')).toContainText('Copied');
+
+  // someone else opens it: a copy lands in their browser
+  const other = await browser.newContext();
+  const p2 = await other.newPage();
+  await p2.goto(url);
+  await expect(p2.locator('#log')).toContainText('Opened a shared project');
+  await expect(p2.locator('#file-list')).toContainText('blinky_tb.v');
+  expect(new URL(p2.url()).pathname).toBe('/');
+  p2.once('dialog', (d) => d.accept());
+  await p2.getByRole('button', { name: 'Report this project' }).click();
+  await expect(p2.locator('#log')).toContainText('Reported');
+
+  // the creator deletes the link; it stops working
+  page.once('dialog', (d) => d.accept());
+  await page.getByRole('button', { name: 'Delete link' }).click();
+  await expect(page.locator('#share-dialog')).toContainText('Link deleted');
+  const p3 = await other.newPage();
+  await p3.goto(url);
+  await expect(p3.locator('#status')).toContainText('does not exist or has expired');
+  await other.close();
+});
