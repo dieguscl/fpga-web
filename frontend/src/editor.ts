@@ -1,4 +1,6 @@
 import { EditorView, basicSetup } from 'codemirror';
+import { indentWithTab } from '@codemirror/commands';
+import { keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { verilog } from '@codemirror/legacy-modes/mode/verilog';
@@ -44,6 +46,7 @@ export class Editor {
       doc: text,
       extensions: [
         basicSetup,
+        keymap.of([indentWithTab]), // Tab/Shift-Tab indent the selected lines (Esc, Tab leaves the editor)
         StreamLanguage.define(verilog),
         hexaflexTheme,
         syntaxHighlighting(hexaflexHighlight),

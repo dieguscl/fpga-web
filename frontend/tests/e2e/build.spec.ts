@@ -200,3 +200,18 @@ test('virtual Basys 3: switches drive LEDs and the 7-segment display', async ({ 
   await page.mouse.up();
   await expect(page.locator('.vb-led.vb-lit')).toHaveCount(2);
 });
+
+test('Tab indents the selected lines, Shift+Tab dedents them', async ({ page }) => {
+  await page.goto('/');
+  page.once('dialog', (d) => d.accept('tabs.v'));
+  await page.click('#add-file');
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('a\nb\nc');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Tab');
+  const lines = () => page.locator('.cm-line').allTextContents();
+  await expect.poll(lines).toEqual(['  a', '  b', '  c']);
+  await page.keyboard.press('Shift+Tab');
+  await expect.poll(lines).toEqual(['a', 'b', 'c']);
+});
