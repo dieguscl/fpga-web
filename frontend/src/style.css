@@ -564,6 +564,17 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 16px; }
 .about-stack dd { margin: 0; }
 @media (max-width: 520px) { .about-stack { grid-template-columns: 1fr; } .about-stack dd { margin-bottom: 6px; } }
 #settings-dialog { max-width: min(560px, calc(100vw - 32px)); }
+.newfile-form { display: flex; flex-direction: column; gap: 16px; margin: 0; min-width: min(420px, calc(100vw - 80px)); }
+.newfile-form .field-col { display: flex; flex-direction: column; gap: 8px; }
+.newfile-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.newfile-kind { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border: 0; text-align: left; background: var(--hf-surface-container); color: var(--hf-text); cursor: pointer; }
+.newfile-kind small { color: var(--hf-text-muted); font-size: 0.75rem; font-weight: 400; }
+.newfile-kind.active { background: var(--hf-surface-container-highest); box-shadow: inset 0 -2px 0 var(--hf-primary); color: var(--hf-primary); }
+.newfile-name { display: flex; align-items: center; gap: 2px; font-family: var(--font-mono); }
+.newfile-name input { flex: 1; min-width: 0; font-family: var(--font-mono); }
+.newfile-hint { margin: 0; min-height: 1.2em; }
+.newfile-hint.err { color: var(--hf-error); }
+.newfile-actions { display: flex; justify-content: flex-end; gap: 8px; }
 #settings-dialog { max-height: calc(100vh - 32px); overflow: auto; }
 
 /* ── Icon buttons ──────────────────────────────────────────────────────── */

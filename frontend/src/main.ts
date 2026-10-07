@@ -24,8 +24,9 @@ import { emptyCircuit, parseCircuit, serializeCircuit, type Circuit } from './ci
 import { subInterfaces } from './circuit/sim';
 import { generateVerilog } from './circuit/verilog';
 import { flash, webUsbSupported } from './flasher';
-import { exportZip, newProject, NAME_RE, ProjectStore, type Project } from './project';
+import { exportZip, newProject, ProjectStore, type Project } from './project';
 import { importUpload, type VivadoNote } from './vivado';
+import { checkStem, FILE_KINDS, planNewFile, starterContent, type FileKind } from './newfile';
 import { detectOS, setupHelpHtml } from './setup-help';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -193,9 +194,7 @@ const circuitEditor = new CircuitEditor($('circuit'), {
   circuits: projectCircuits,
 });
 
-function newCircuit() {
-  const name = prompt(t('prompt.circuitName'), 'circuit1')?.trim();
-  if (!name) return;
+function newCircuit(name: string) {
   if (!CIRCUIT_NAME.test(name)) return alert(t('alert.badCircuitName'));
   const file = `${name}.circ`;
   if (!(file in project.files)) {
@@ -204,6 +203,79 @@ function newCircuit() {
     scheduleSave();
   }
   openFile(file);
+}
+
+// New file: pick what the file is for; name and starter content are filled in.
+let newFileKind: FileKind = 'module';
+let newFileStemEdited = false;
+
+function newFilePlan() {
+  return planNewFile(newFileKind, project.files, boardInfo(project.board)?.constraint_ext ?? '.xdc',
+    $<HTMLInputElement>('top').value.trim() || project.top);
+}
+
+function renderNewFileDialog(resetStem: boolean) {
+  const plan = newFilePlan();
+  const ext = boardInfo(project.board)?.constraint_ext ?? '.xdc';
+  $('newfile-kinds').replaceChildren(...FILE_KINDS.map((k) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'newfile-kind' + (k === newFileKind ? ' active' : '');
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(k === newFileKind));
+    const title = document.createElement('span');
+    title.textContent = t(`newfile.kind.${k}` as Key);
+    const desc = document.createElement('small');
+    desc.textContent = t(`newfile.kind.${k}.desc` as Key, { ext });
+    b.append(title, desc);
+    b.onclick = () => { newFileKind = k; newFileStemEdited = false; renderNewFileDialog(true); };
+    return b;
+  }));
+  const stem = $<HTMLInputElement>('newfile-stem');
+  if (resetStem || !newFileStemEdited) stem.value = plan.stem;
+  stem.disabled = plan.fixed;
+  $('newfile-ext').textContent = plan.ext;
+  validateNewFile();
+}
+
+function validateNewFile(): boolean {
+  const plan = newFilePlan();
+  const hint = $('newfile-hint');
+  const ok = $<HTMLButtonElement>('newfile-ok');
+  hint.classList.remove('err');
+  ok.textContent = t(plan.exists ? 'newfile.open' : 'newfile.create');
+  if (newFileKind === 'constraints' && plan.exists) hint.textContent = t('newfile.hint.constraintsExists', { name: plan.name });
+  else if (newFileKind === 'testbench') hint.textContent = plan.exists ? t('newfile.hint.testbenchExists', { name: plan.name }) : t('newfile.hint.testbench', { top: plan.stem.slice(0, -3) });
+  else hint.textContent = newFileKind === 'module' || newFileKind === 'circuit' ? t('newfile.hint.module') : '';
+  if (plan.fixed) { ok.disabled = false; return true; }
+  const err = checkStem(newFileKind, $<HTMLInputElement>('newfile-stem').value.trim(), plan.ext, project.files);
+  if (err) { hint.textContent = t(`newfile.err.${err}`); hint.classList.add('err'); }
+  ok.disabled = !!err;
+  return !err;
+}
+
+function openNewFileDialog(kind: FileKind) {
+  newFileKind = kind;
+  newFileStemEdited = false;
+  renderNewFileDialog(true);
+  const dlg = $<HTMLDialogElement>('newfile-dialog');
+  dlg.showModal();
+  const stem = $<HTMLInputElement>('newfile-stem');
+  if (!stem.disabled) stem.select();
+}
+
+function createNewFile() {
+  if (!validateNewFile()) return;
+  const plan = newFilePlan();
+  const stem = plan.fixed ? plan.stem : $<HTMLInputElement>('newfile-stem').value.trim();
+  const name = plan.fixed ? plan.name : `${stem}${plan.ext}`;
+  if (newFileKind === 'testbench') return newTestbench();
+  if (newFileKind === 'circuit') return newCircuit(stem);
+  if (!(name in project.files)) {
+    project.files[name] = starterContent(newFileKind, stem, plan.ext, project.board);
+    scheduleSave();
+  }
+  openFile(name);
 }
 
 /** Replace typographic quotes/dashes (from code copied out of PDFs/Word) in HDL files; returns the changed files. */
@@ -699,14 +771,7 @@ async function init() {
     const p = await store.get((e.target as HTMLSelectElement).value);
     if (p) await openProject(p);
   };
-  $('add-file').onclick = () => {
-    const name = prompt(t('prompt.fileName'))?.trim();
-    if (!name) return;
-    if (!NAME_RE.test(name)) return alert(t('alert.invalidName'));
-    project.files[name] ??= '';
-    scheduleSave();
-    openFile(name);
-  };
+  $('add-file').onclick = () => openNewFileDialog('module');
   document.querySelectorAll<HTMLButtonElement>('#mobile-nav [data-mview]').forEach((b) => {
     b.onclick = () => setMobileView(b.dataset.mview as MobileView);
   });
@@ -721,7 +786,13 @@ async function init() {
   $('tab-board').onclick = () => { mainTab = 'board'; showView(); };
   $('simulate').onclick = () => void simulate();
   $('new-tb').onclick = newTestbench;
-  $('new-circuit').onclick = newCircuit;
+  $<HTMLInputElement>('newfile-stem').oninput = () => { newFileStemEdited = true; validateNewFile(); };
+  $('newfile-cancel').onclick = () => $<HTMLDialogElement>('newfile-dialog').close();
+  $<HTMLFormElement>('newfile-form').onsubmit = (e) => {
+    if (!validateNewFile()) { e.preventDefault(); return; }
+    createNewFile();
+  };
+  $('new-circuit').onclick = () => openNewFileDialog('circuit');
   $('view-text').onclick = () => { fileView = 'text'; showView(); };
   $('export').onclick = () => {
     const a = document.createElement('a');

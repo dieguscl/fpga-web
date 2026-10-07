@@ -130,6 +130,20 @@
     </div>
     <form method="dialog"><button class="btn-primary" data-i18n="btn.close">Close</button></form>
   </dialog>
+  <dialog id="newfile-dialog">
+    <h3 data-i18n="newfile.title">New file</h3>
+    <form method="dialog" id="newfile-form" class="newfile-form">
+      <div class="newfile-kinds" id="newfile-kinds" role="radiogroup"></div>
+      <label class="field-col"><span class="label" data-i18n="newfile.name">Name</span>
+        <span class="newfile-name"><input id="newfile-stem" autocomplete="off" spellcheck="false" /><span id="newfile-ext"></span></span>
+      </label>
+      <p id="newfile-hint" class="newfile-hint"></p>
+      <div class="newfile-actions">
+        <button type="button" class="btn-ghost" id="newfile-cancel" data-i18n="newfile.cancel">Cancel</button>
+        <button type="submit" class="btn-primary" id="newfile-ok" data-i18n="newfile.create">Create</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="share-dialog"><div id="share-body"></div><form method="dialog"><button class="btn-ghost" data-i18n="btn.close">Close</button></form></dialog>
   <dialog id="setup-help" class="hex-crop"><div id="setup-help-body"></div><form method="dialog"><button class="btn-primary" data-i18n="btn.close">Close</button></form></dialog>
   <input type="file" id="import-file" accept=".zip,.xpr,.v,.sv,.vh,.svh,.xdc,.mem,.hex" multiple hidden />
