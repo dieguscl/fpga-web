@@ -50,11 +50,13 @@ interface Source {
 
 function zipSource(bytes: Uint8Array): Source {
   if (bytes.length > MAX_ZIP_BYTES) throw new Error('zip too large');
+  // Windows' Compress-Archive writes entry names with backslashes; paths use '/'.
+  const norm = (name: string) => name.replace(/\\/g, '/');
   const paths: string[] = [];
   unzipSync(bytes, {
     filter: (f) => {
       if (paths.length >= MAX_ZIP_ENTRIES) throw new Error('zip has too many entries');
-      if (!f.name.endsWith('/')) paths.push(f.name);
+      if (!norm(f.name).endsWith('/')) paths.push(norm(f.name));
       return false;
     },
   });
@@ -65,13 +67,13 @@ function zipSource(bytes: Uint8Array): Source {
       let total = 0;
       const out = unzipSync(bytes, {
         filter: (f) => {
-          if (!set.has(f.name)) return false;
+          if (!set.has(norm(f.name))) return false;
           total += f.originalSize || 0;
           if (total > MAX_TOTAL_BYTES * 2) throw new Error('project files too large');
           return true;
         },
       });
-      return new Map(Object.entries(out));
+      return new Map(Object.entries(out).map(([k, v]) => [norm(k), v]));
     },
   };
 }
@@ -125,6 +127,8 @@ function option(xml: string, name: string): string | undefined {
 interface XprFile {
   path: string;
   enabled: boolean;
+  /** UsedIn lists simulation but not synthesis. */
+  simOnly: boolean;
 }
 interface XprFileSet {
   name: string;
@@ -152,11 +156,17 @@ export function parseXpr(xml: string): Xpr {
       const path = attr(f[1], 'Path');
       if (!path) continue;
       const info = f[2] ?? '';
-      files.push({ path, enabled: !/<Attr\s+Name="IsEnabled"\s+Val="(0|false)"/i.test(info) });
+      const usedIn = [...info.matchAll(/<Attr\s+Name="UsedIn"\s+Val="(\w+)"/g)].map((u) => u[1]);
+      files.push({
+        path,
+        enabled: !/<Attr\s+Name="IsEnabled"\s+Val="(0|false)"/i.test(info),
+        simOnly: usedIn.length > 0 && !usedIn.includes('synthesis'),
+      });
     }
     fileSets.push({ name: attr(m[1], 'Name') ?? '', type: attr(m[1], 'Type') ?? '', top: option(m[2], 'TopModule'), files });
   }
-  const synth = [...xml.matchAll(/<Run\b([^>]*)>/g)].map((r) => r[1]).find((r) => /Type="[^"]*Synth/.test(r));
+  const synths = [...xml.matchAll(/<Run\b([^>]*)>/g)].map((r) => r[1]).filter((r) => /Type="[^"]*Synth/.test(r));
+  const synth = synths.find((r) => /State="current"/.test(r)) ?? synths[0];
   return {
     part: option(config, 'Part') ?? '',
     boardPart: option(config, 'BoardPart') ?? '',
@@ -196,7 +206,10 @@ function safeName(name: string, taken: Set<string>): string {
   if (!/^[A-Za-z0-9_]/.test(stem)) stem = `_${stem}`;
   stem = stem.slice(0, 60 - e.length);
   let out = stem + e;
-  for (let i = 2; taken.has(out.toLowerCase()); i++) out = `${stem}_${i}${e}`;
+  // Number before a _tb suffix so a testbench stays a testbench (foo_2_tb.v).
+  const tb = /_tb$/.test(stem) ? '_tb' : '';
+  const base = tb ? stem.slice(0, -3) : stem;
+  for (let i = 2; taken.has(out.toLowerCase()); i++) out = `${base}_${i}${tb}${e}`;
   taken.add(out.toLowerCase());
   return out;
 }
@@ -213,7 +226,8 @@ const isGlob = (s: string) => /[*?]/.test(s);
  */
 export function expandXdcWildcards(text: string): { text: string; changed: boolean } {
   const ports: string[] = [];
-  for (const m of text.matchAll(GET_PORTS_RE)) {
+  const live = text.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  for (const m of live.matchAll(GET_PORTS_RE)) {
     for (const p of unbrace(m[1]).split(/\s+/)) if (p && !isGlob(p) && !ports.includes(p)) ports.push(p);
   }
   let changed = false;
@@ -240,7 +254,7 @@ function decode(bytes: Uint8Array): string {
 /** Top module when the .xpr doesn't name one: the module nothing else instantiates. */
 function guessTop(sources: string[], preferred: string): string {
   const modules = sources.flatMap((s) => [...s.matchAll(/^\s*module\s+([A-Za-z_][A-Za-z0-9_$]*)/gm)].map((m) => m[1]));
-  const all = sources.join('\n');
+  const all = sources.join('\n').replace(/^\s*module\s+[A-Za-z_][\w$]*/gm, '');
   const roots = modules.filter((m) => !new RegExp(`(^|[^\\w$])${m.replace(/\$/g, '\\$')}\\s+(#\\s*\\(|[A-Za-z_][\\w$]*\\s*\\()`).test(all));
   return roots.find((m) => m === preferred) ?? roots[0] ?? modules[0] ?? '';
 }
@@ -282,7 +296,12 @@ export function importVivado(src: Source, boards: BoardInfo[], currentBoard: str
       while (i < ps.length && i < segs.length && ps[i] === segs[i]) i++;
       return i;
     };
-    return same.sort((a, b) => score(b) - score(a))[0] ?? null;
+    const best = same.sort((a, b) => score(b) - score(a))[0];
+    if (!best) return null;
+    // Loose files have no folders to compare; in a zip, same name alone could
+    // be a stale copy elsewhere, so take it only if it's the only one.
+    if (best.includes('/') && score(best) < 2 && same.length > 1) return null;
+    return best;
   };
 
   const set = (type: string, name?: string) =>
@@ -308,7 +327,8 @@ export function importVivado(src: Source, boards: BoardInfo[], currentBoard: str
       if (seen.has(at)) continue;
       seen.add(at);
       // A header or memory file in the simulation set is support, not a testbench.
-      picks.push({ from: at, role: role === 'tb' && !['.v', '.sv'].includes(e) ? 'design' : role });
+      const r = role === 'design' && f.simOnly ? 'tb' : role;
+      picks.push({ from: at, role: r === 'tb' && !['.v', '.sv'].includes(e) ? 'design' : r });
     }
   };
   take(design, 'design');
@@ -326,8 +346,9 @@ export function importVivado(src: Source, boards: BoardInfo[], currentBoard: str
 
   for (const p of picks.filter((p) => p.role !== 'xdc')) {
     let name = basename(p.from);
-    if (p.role === 'tb' && !/_tb$/i.test(name.slice(0, -ext(name).length))) {
-      const tbName = `${name.slice(0, -ext(name).length)}_tb${ext(name)}`;
+    const stem = name.slice(0, -ext(name).length);
+    if (p.role === 'tb' && !/_tb$/.test(stem)) {
+      const tbName = `${stem.replace(/_tb$/i, '')}_tb${ext(name)}`;
       notes.push({ kind: 'renamedTb', file: name, to: tbName });
       name = tbName;
     }
@@ -352,7 +373,7 @@ export function importVivado(src: Source, boards: BoardInfo[], currentBoard: str
     }
   }
 
-  const hdl = Object.keys(files).filter((n) => ['.v', '.sv'].includes(ext(n)) && !/_tb\.s?v$/i.test(n));
+  const hdl = Object.keys(files).filter((n) => ['.v', '.sv'].includes(ext(n)) && !/_tb\.s?v$/.test(n));
   if (!hdl.length) throw new Error('the Vivado project has no Verilog design sources that could be found');
   if (Object.keys(files).length > MAX_FILES) throw new Error(`a project can have at most ${MAX_FILES} files`);
   if (total > MAX_TOTAL_BYTES) throw new Error('project files too large');

@@ -243,3 +243,52 @@ describe('expandXdcWildcards', () => {
     expect(expandXdcWildcards(xdc)).toEqual({ text: xdc, changed: false });
   });
 });
+
+describe('review fixes', () => {
+  const tbXpr = (sims: string[], srcs = [file('$PSRCDIR/sources_1/new/top.v')]) => xpr({ srcs, sims });
+  it('lower-cases _TB and keeps _tb when numbering clashes', () => {
+    const r = importUpload([zip({
+      'p/p.xpr': tbXpr([file('$PSRCDIR/sim_1/new/Counter_TB.v'), file('$PSRCDIR/sim_1/new/foo.v'), file('$PSRCDIR/sim_1/a/foo_tb.v')]),
+      'p/p.srcs/sources_1/new/top.v': 'module top; endmodule\n',
+      'p/p.srcs/sim_1/new/Counter_TB.v': 'module c; endmodule\n',
+      'p/p.srcs/sim_1/new/foo.v': 'module f; endmodule\n',
+      'p/p.srcs/sim_1/a/foo_tb.v': 'module g; endmodule\n',
+    })], BOARDS, 'basys3');
+    expect(Object.keys(r.project.files).sort()).toEqual(['Counter_tb.v', 'foo_2_tb.v', 'foo_tb.v', 'top.v']);
+  });
+  it('reads zips with backslash entry names', () => {
+    const r = importUpload([zip({
+      'p\\p.xpr': tbXpr([]),
+      'p\\p.srcs\\sources_1\\new\\top.v': 'module top; endmodule\n',
+    })], BOARDS, 'basys3');
+    expect(Object.keys(r.project.files)).toEqual(['top.v']);
+  });
+  it('guesses a parameterised top', () => {
+    const r = importUpload([zip({
+      'p/p.xpr': xpr({ top: '', srcs: [file('$PSRCDIR/a.v')] }),
+      'p/p.srcs/a.v': 'module top #(parameter N = 4) (input x);\n  leaf u (.x(x));\nendmodule\nmodule leaf(input x); endmodule\n',
+    })], BOARDS, 'basys3');
+    expect(r.project.top).toBe('top');
+  });
+  it('treats simulation-only files in the design set as testbenches', () => {
+    const r = importUpload([zip({
+      'p/p.xpr': xpr({ srcs: [file('$PSRCDIR/top.v'), `      <File Path="$PSRCDIR/check.v">\n        <FileInfo>\n          <Attr Name="UsedIn" Val="simulation"/>\n        </FileInfo>\n      </File>\n`] }),
+      'p/p.srcs/top.v': 'module top; endmodule\n',
+      'p/p.srcs/check.v': 'module check; endmodule\n',
+    })], BOARDS, 'basys3');
+    expect(Object.keys(r.project.files).sort()).toEqual(['check_tb.v', 'top.v']);
+  });
+  it('does not pick a same-named file from an unrelated folder when several exist', () => {
+    const r = importUpload([zip({
+      'lab/p/p.xpr': xpr({ srcs: [file('$PSRCDIR/sources_1/new/top.v'), file('$PPRDIR/../src/util.v')] }),
+      'lab/p/p.srcs/sources_1/new/top.v': 'module top; endmodule\n',
+      'old/x/util.v': 'module stale; endmodule\n',
+      'old/y/util.v': 'module stale2; endmodule\n',
+    })], BOARDS, 'basys3');
+    expect(r.notes).toContainEqual({ kind: 'missing', file: 'util.v' });
+  });
+  it('ignores commented-out ports when expanding wildcards', () => {
+    const r = expandXdcWildcards('set_property PACKAGE_PIN U16 [get_ports {led[0]}]\n#set_property PACKAGE_PIN E19 [get_ports {led[1]}]\nset_property IOSTANDARD LVCMOS33 [get_ports {led[*]}]\n');
+    expect(r.text).toBe('set_property PACKAGE_PIN U16 [get_ports {led[0]}]\n#set_property PACKAGE_PIN E19 [get_ports {led[1]}]\nset_property IOSTANDARD LVCMOS33 [get_ports {led[0]}]\n');
+  });
+});
