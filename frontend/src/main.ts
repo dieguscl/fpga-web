@@ -273,6 +273,10 @@ function createNewFile() {
   if (newFileKind === 'circuit') return newCircuit(stem);
   if (!(name in project.files)) {
     project.files[name] = starterContent(newFileKind, stem, plan.ext, project.board);
+    if (newFileKind === 'module' && !project.top) {
+      project.top = stem; // first module of an empty project
+      $<HTMLInputElement>('top').value = stem;
+    }
     scheduleSave();
   }
   openFile(name);
@@ -360,7 +364,7 @@ async function importFromFolder(folder: PickedFolder) {
   $<HTMLDialogElement>('xpr-dialog').close();
   if (!job) return;
   try {
-    await finishImport(await importXprWithFolder(job.name, job.bytes, folder, boards, project.board));
+    await finishImport(await importXprWithFolder(job.name, job.bytes, folder, boards, project?.board ?? ''));
   } catch (err) {
     alert(t('alert.importFailed', { msg: (err as Error).message }));
   }
@@ -519,13 +523,41 @@ async function openProject(p: Project) {
   resetOutput();
 }
 
+// New project dialog: a name and whether to start empty or from the board's example.
+function askNewProject(boardId: string): Promise<{ name: string; example: boolean } | null> {
+  const dlg = $<HTMLDialogElement>('newproj-dialog');
+  const name = $<HTMLInputElement>('newproj-name');
+  const starts = [...dlg.querySelectorAll<HTMLButtonElement>('[data-start]')];
+  const choose = (start: string) => starts.forEach((b) => {
+    b.classList.toggle('active', b.dataset.start === start);
+    b.setAttribute('aria-checked', String(b.dataset.start === start));
+  });
+  choose('empty');
+  name.value = `${boardId}-project`;
+  return new Promise((resolve) => {
+    let result: { name: string; example: boolean } | null = null;
+    starts.forEach((b) => (b.onclick = () => choose(b.dataset.start!)));
+    $('newproj-cancel').onclick = () => dlg.close();
+    $<HTMLFormElement>('newproj-form').onsubmit = (e) => {
+      const n = name.value.trim();
+      if (!n) { e.preventDefault(); name.focus(); return; }
+      result = { name: n, example: starts.some((b) => b.dataset.start === 'example' && b.classList.contains('active')) };
+    };
+    dlg.addEventListener('close', () => resolve(result), { once: true });
+    dlg.showModal();
+    name.select();
+  });
+}
+
+/** `name` given (first visit): no dialog, start from the example so the site works out of the box. */
 async function createProject(boardId: string, name?: string): Promise<boolean> {
   const gen = ++projectGen;
-  const projectName = name ?? prompt(t('prompt.projectName'), `${boardId}-blinky`) ?? '';
-  if (!projectName) return false;
-  const tpl = await fetchTemplate(boardId);
+  const choice = name ? { name, example: true } : await askNewProject(boardId);
+  if (!choice) return false;
+  if (gen !== projectGen) return false; // superseded while the dialog was open
+  const tpl = choice.example ? await fetchTemplate(boardId) : { top: '', files: {} };
   if (gen !== projectGen) return false; // superseded by a newer project switch
-  const p = newProject(projectName, boardId, tpl);
+  const p = newProject(choice.name, boardId, tpl);
   await store.save(p);
   if (gen !== projectGen) return false; // superseded while saving
   await openProject(p);
@@ -900,7 +932,7 @@ async function init() {
       const uploads = await Promise.all(picked.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
       // A lone .xpr only lists paths: ask for the folder that holds the files.
       if (uploads.length === 1 && /\.xpr$/i.test(uploads[0].name)) return askXprFolder(uploads[0].name, uploads[0].bytes);
-      await finishImport(importUpload(uploads, boards, project.board));
+      await finishImport(importUpload(uploads, boards, project?.board ?? ''));
     } catch (err) {
       alert(t('alert.importFailed', { msg: (err as Error).message }));
     }

@@ -1,4 +1,26 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+// New project dialog: name it and start from the board's example.
+test('new project starts empty unless the example is chosen', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#file-list')).toContainText('blinky.v'); // first visit: example
+  await page.click('#new-project');
+  await page.fill('#newproj-name', 'blank');
+  await page.click('#newproj-ok');
+  await expect(page.locator('#file-list li')).toHaveCount(0);
+  await expect(page.locator('#project')).toContainText('blank');
+  await page.click('#add-file');
+  await page.click('#newfile-ok');
+  await expect(page.locator('#file-list')).toContainText('module1.v');
+  await expect(page.locator('#top')).toHaveValue('module1');
+});
+
+async function newExampleProject(page: Page, name: string) {
+  await page.click('#new-project');
+  await page.fill('#newproj-name', name);
+  await page.click('[data-start="example"]');
+  await page.click('#newproj-ok');
+}
 
 test('new basys3 project builds and offers a download', async ({ page }) => {
   await page.goto('/');
@@ -7,8 +29,7 @@ test('new basys3 project builds and offers a download', async ({ page }) => {
   // COOP/COEP on every response, including this static shell, to get there.
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
   await page.selectOption('#board', 'basys3');
-  page.once('dialog', (d) => d.accept('blink'));
-  await page.click('#new-project');
+  await newExampleProject(page, 'blink');
   await expect(page.locator('#file-list')).toContainText('blinky.v');
   await page.click('#build');
   await expect(page.locator('#status')).toContainText('Build succeeded', { timeout: 150_000 });
@@ -21,8 +42,7 @@ test('new basys3 project builds and offers a download', async ({ page }) => {
 test('syntax error shows a clickable location', async ({ page }) => {
   await page.goto('/');
   await page.selectOption('#board', 'icebreaker');
-  page.once('dialog', (d) => d.accept('broken'));
-  await page.click('#new-project');
+  await newExampleProject(page, 'broken');
   await page.locator('#file-list li', { hasText: 'blinky.v' }).click();
   await page.locator('.cm-content').click();
   await page.keyboard.press('Control+End');
@@ -38,8 +58,7 @@ test('syntax error shows a clickable location', async ({ page }) => {
 test('basys3 pin planner: clear, auto-assign, build', async ({ page }) => {
   await page.goto('/');
   await page.selectOption('#board', 'basys3');
-  page.once('dialog', (d) => d.accept('planner'));
-  await page.click('#new-project');
+  await newExampleProject(page, 'planner');
   await page.locator('#file-list li', { hasText: 'basys3.xdc' }).click();
   await expect(page.locator('#planner svg.pp-board')).toBeVisible();
   await expect(page.locator('.pp-summary')).toContainText('17/17');
@@ -60,8 +79,7 @@ test('basys3 pin planner: clear, auto-assign, build', async ({ page }) => {
 test('simulate the basys3 example testbench and show the waveform', async ({ page }) => {
   await page.goto('/');
   await page.selectOption('#board', 'basys3');
-  page.once('dialog', (d) => d.accept('sim'));
-  await page.click('#new-project');
+  await newExampleProject(page, 'sim');
   await expect(page.locator('#file-list')).toContainText('blinky_tb.v');
   await expect(page.locator('#download')).toBeHidden();
   await page.click('#simulate');
@@ -84,8 +102,7 @@ test('simulate the basys3 example testbench and show the waveform', async ({ pag
 test('generate a testbench for a new top module', async ({ page }) => {
   await page.goto('/');
   await page.selectOption('#board', 'icebreaker');
-  page.once('dialog', (d) => d.accept('tbgen'));
-  await page.click('#new-project');
+  await newExampleProject(page, 'tbgen');
   await page.click('#new-tb');
   await expect(page.locator('#file-list')).toContainText('_tb.v');
   await expect(page.locator('.cm-content')).toContainText('$dumpvars');
@@ -95,8 +112,9 @@ test('generate a testbench for a new top module', async ({ page }) => {
 
 test('draw a circuit, get Verilog, run it live', async ({ page }) => {
   await page.goto('/');
-  page.once('dialog', (d) => d.accept('gates'));
   await page.click('#new-circuit');
+  await page.fill('#newfile-stem', 'gates');
+  await page.click('#newfile-ok');
   const canvas = page.locator('.ce-canvas');
   await expect(canvas).toBeVisible();
   await page.waitForTimeout(100);
@@ -209,8 +227,9 @@ test('virtual Basys 3: switches drive LEDs and the 7-segment display', async ({ 
 
 test('Tab indents the selected lines, Shift+Tab dedents them', async ({ page }) => {
   await page.goto('/');
-  page.once('dialog', (d) => d.accept('tabs.v'));
   await page.click('#add-file');
+  await page.fill('#newfile-stem', 'tabs');
+  await page.click('#newfile-ok');
   await page.locator('.cm-content').click();
   await page.keyboard.press('Control+a');
   await page.keyboard.type('a\nb\nc');
@@ -224,8 +243,12 @@ test('Tab indents the selected lines, Shift+Tab dedents them', async ({ page }) 
 
 test('Vim mode toggle in settings', async ({ page }) => {
   await page.goto('/');
-  page.once('dialog', (d) => d.accept('vim.v'));
   await page.click('#add-file');
+  await page.fill('#newfile-stem', 'vim');
+  await page.click('#newfile-ok');
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Delete'); // start from an empty file, not the module template
   await page.click('#settings');
   await page.check('#vim-mode');
   await page.keyboard.press('Escape');
@@ -249,8 +272,7 @@ test('Vim mode toggle in settings', async ({ page }) => {
 test('typographic quotes are converted, not rejected', async ({ page }) => {
   await page.goto('/');
   await page.selectOption('#board', 'basys3');
-  page.once('dialog', (d) => d.accept('quotes'));
-  await page.click('#new-project');
+  await newExampleProject(page, 'quotes');
   await page.locator('#file-list li', { hasText: 'blinky_tb.v' }).click();
   await page.locator('.cm-content').click();
   await page.keyboard.press('Control+End');
@@ -278,8 +300,7 @@ test('share link: create, open a copy elsewhere, report, delete', async ({ page,
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/');
   await page.selectOption('#board', 'basys3');
-  page.once('dialog', (d) => d.accept(`shared-${Date.now()}`));
-  await page.click('#new-project');
+  await newExampleProject(page, `shared-${Date.now()}`);
   await expect(page.locator('#file-list')).toContainText('blinky.v');
   await page.click('#share');
   await expect(page.locator('#share-dialog')).toContainText('Anyone with the link');

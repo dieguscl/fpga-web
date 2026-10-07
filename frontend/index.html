@@ -130,6 +130,22 @@
     </div>
     <form method="dialog"><button class="btn-primary" data-i18n="btn.close">Close</button></form>
   </dialog>
+  <dialog id="newproj-dialog">
+    <h3 data-i18n="newproj.title">New project</h3>
+    <form method="dialog" id="newproj-form" class="newfile-form">
+      <label class="field-col"><span class="label" data-i18n="newfile.name">Name</span>
+        <input id="newproj-name" autocomplete="off" spellcheck="false" />
+      </label>
+      <div class="newfile-kinds" role="radiogroup">
+        <button type="button" class="newfile-kind active" data-start="empty" role="radio" aria-checked="true"><span data-i18n="newproj.empty">Empty</span><small data-i18n="newproj.empty.desc">No files: add your own</small></button>
+        <button type="button" class="newfile-kind" data-start="example" role="radio" aria-checked="false"><span data-i18n="newproj.example">Example</span><small data-i18n="newproj.example.desc">A blinking LED for this board</small></button>
+      </div>
+      <div class="newfile-actions">
+        <button type="button" class="btn-ghost" id="newproj-cancel" data-i18n="newfile.cancel">Cancel</button>
+        <button type="submit" class="btn-primary" id="newproj-ok" data-i18n="newfile.create">Create</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="newfile-dialog">
     <h3 data-i18n="newfile.title">New file</h3>
     <form method="dialog" id="newfile-form" class="newfile-form">
