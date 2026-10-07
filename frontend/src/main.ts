@@ -24,7 +24,8 @@ import { emptyCircuit, parseCircuit, serializeCircuit, type Circuit } from './ci
 import { subInterfaces } from './circuit/sim';
 import { generateVerilog } from './circuit/verilog';
 import { flash, webUsbSupported } from './flasher';
-import { exportZip, importZip, newProject, NAME_RE, ProjectStore, type Project } from './project';
+import { exportZip, newProject, NAME_RE, ProjectStore, type Project } from './project';
+import { importUpload, type VivadoNote } from './vivado';
 import { detectOS, setupHelpHtml } from './setup-help';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -206,6 +207,22 @@ function newCircuit() {
 }
 
 /** Replace typographic quotes/dashes (from code copied out of PDFs/Word) in HDL files; returns the changed files. */
+function vivadoNote(n: VivadoNote): string {
+  switch (n.kind) {
+    case 'missing': return t('log.vivado.missing', { file: n.file });
+    case 'vhdl': return t('log.vivado.vhdl', { file: n.file });
+    case 'skipped': return t('log.vivado.skipped', { file: n.file });
+    case 'renamedTb': return t('log.vivado.renamedTb', { file: n.file, to: n.to });
+    case 'mergedXdc': return t('log.vivado.mergedXdc', { files: n.files.join(', '), to: n.to });
+    case 'expandedXdc': return t('log.vivado.expandedXdc', { file: n.file });
+    case 'guessedTop': return t('log.vivado.guessedTop', { top: n.top });
+    case 'noBoard': return t('log.vivado.noBoard', { part: n.part || '?', board: n.board });
+    case 'board':
+      return t('log.vivado.board', { part: n.part, board: n.board }) +
+        (n.others.length ? ' ' + t('log.vivado.boardOthers', { others: n.others.join(', ') }) : '');
+  }
+}
+
 function fixTypography(p: Project): string[] {
   const changed: string[] = [];
   for (const [name, text] of Object.entries(p.files)) {
@@ -716,15 +733,22 @@ async function init() {
   };
   $('import').onclick = () => $<HTMLInputElement>('import-file').click();
   $<HTMLInputElement>('import-file').onchange = async (e) => {
-    const f = (e.target as HTMLInputElement).files?.[0];
-    if (!f) return;
+    const input = e.target as HTMLInputElement;
+    const picked = [...(input.files ?? [])];
+    input.value = ''; // so picking the same file again still fires change
+    if (!picked.length) return;
     try {
-      const p = importZip(new Uint8Array(await f.arrayBuffer()));
+      const uploads = await Promise.all(picked.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
+      const { project: p, notes, vivado } = importUpload(uploads, boards, project.board);
       if (!boardInfo(p.board)) throw new Error(t('err.unknownBoard', { board: p.board }));
       const fixed = fixTypography(p);
       projectGen++;
       await store.save(p);
       await openProject(p);
+      if (vivado) {
+        appendLog(t('log.vivado.imported', { files: Object.keys(p.files).sort().join(', '), top: p.top }));
+        for (const n of notes) appendLog(vivadoNote(n));
+      }
       if (fixed.length) appendLog(t('log.fixedQuotes', { files: fixed.join(', ') }));
     } catch (err) {
       alert(t('alert.importFailed', { msg: (err as Error).message }));

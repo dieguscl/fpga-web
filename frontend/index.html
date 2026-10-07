@@ -26,7 +26,7 @@
       <div class="row">
         <select id="project" aria-label="Project" disabled></select>
         <button id="new-project" data-icon="folderPlus" class="btn-ghost" disabled data-i18n="btn.new">New</button>
-        <button id="import" data-icon="upload" class="btn-ghost" disabled data-i18n="btn.import">Import</button>
+        <button id="import" data-icon="upload" class="btn-ghost" disabled data-i18n="btn.import" data-i18n-title="btn.import.title">Import</button>
         <button id="export" data-icon="download" class="btn-ghost" disabled data-i18n="btn.export">Export</button>
         <button id="share" data-icon="share" class="btn-ghost" disabled hidden data-i18n="btn.share">Share</button>
       </div>
@@ -132,7 +132,7 @@
   </dialog>
   <dialog id="share-dialog"><div id="share-body"></div><form method="dialog"><button class="btn-ghost" data-i18n="btn.close">Close</button></form></dialog>
   <dialog id="setup-help" class="hex-crop"><div id="setup-help-body"></div><form method="dialog"><button class="btn-primary" data-i18n="btn.close">Close</button></form></dialog>
-  <input type="file" id="import-file" accept=".zip" hidden />
+  <input type="file" id="import-file" accept=".zip,.xpr,.v,.sv,.vh,.svh,.xdc,.mem,.hex" multiple hidden />
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
