@@ -137,6 +137,8 @@ interface XprFileSet {
   files: XprFile[];
 }
 export interface Xpr {
+  /** Where Vivado last saved the project (<Project Path=...>), '/'-separated. */
+  path: string;
   part: string;
   boardPart: string;
   fileSets: XprFileSet[];
@@ -168,6 +170,7 @@ export function parseXpr(xml: string): Xpr {
   const synths = [...xml.matchAll(/<Run\b([^>]*)>/g)].map((r) => r[1]).filter((r) => /Type="[^"]*Synth/.test(r));
   const synth = synths.find((r) => /State="current"/.test(r)) ?? synths[0];
   return {
+    path: (attr(/<Project\b[^>]*>/.exec(xml)?.[0] ?? '', 'Path') ?? '').replace(/\\/g, '/'),
     part: option(config, 'Part') ?? '',
     boardPart: option(config, 'BoardPart') ?? '',
     fileSets,
@@ -259,6 +262,110 @@ function guessTop(sources: string[], preferred: string): string {
   return roots.find((m) => m === preferred) ?? roots[0] ?? modules[0] ?? '';
 }
 
+function xprVars(projDir: string, projName: string): Record<string, string> {
+  return {
+    PPRDIR: projDir,
+    PSRCDIR: resolvePath(projDir, `${projName}.srcs`) ?? '',
+    PGENDIR: resolvePath(projDir, `${projName}.gen`) ?? '',
+    PIPUSERFILESDIR: resolvePath(projDir, `${projName}.ip_user_files`) ?? '',
+  };
+}
+
+/** The file sets the current synthesis run and simulation use. */
+function activeSets(xpr: Xpr) {
+  const set = (type: string, name?: string) =>
+    xpr.fileSets.find((s) => s.type === type && s.name === name) ?? xpr.fileSets.find((s) => s.type === type);
+  return { design: set('DesignSrcs', xpr.srcSet), constrs: set('Constrs', xpr.constrsSet), sim: set('SimulationSrcs', xpr.simSet) };
+}
+
+// ── Importing just the .xpr: ask for the folder that holds its files ──────────
+//
+// A page can't open files by path, so after reading the .xpr it works out the
+// folder containing everything the project uses and asks the user to choose
+// it (or any folder above it). Paths are kept as absolute keys ('/'-separated,
+// no leading slash, e.g. "home/u/lab/mux/mux.v") anchored at the .xpr's
+// recorded location, so importVivado resolves them exactly.
+
+export interface XprNeeds {
+  /** Key of the .xpr itself. */
+  xprKey: string;
+  /** Keys of the files the import would read. */
+  files: string[];
+  /** Key of the deepest folder containing the .xpr and all of files. */
+  folder: string;
+}
+
+const absKey = (p: string) => resolvePath(p.replace(/\\/g, '/')) ?? '';
+
+export function xprNeeds(xml: string, xprFileName: string): XprNeeds {
+  const xpr = parseXpr(xml);
+  const projName = xprFileName.replace(/\.xpr$/i, '');
+  // Without a recorded location, pretend the project sits in a folder of its own name.
+  const projDir = xpr.path ? dirname(absKey(xpr.path)) : projName;
+  const vars = xprVars(projDir, projName);
+  const files: string[] = [];
+  const { design, constrs, sim } = activeSets(xpr);
+  for (const [fs, wanted] of [[design, DESIGN_EXTS], [constrs, new Set(['.xdc'])], [sim, DESIGN_EXTS]] as const) {
+    for (const f of fs?.files ?? []) {
+      if (!f.enabled || !wanted.has(ext(f.path))) continue;
+      const raw = f.path.replace(/\\/g, '/');
+      const path = raw.replace(/^\$(\w+)/, (m, v: string) => vars[v] ?? m);
+      if (path.startsWith('$')) continue;
+      // $VAR paths now start at the project folder; plain relative ones are relative to it.
+      const key = raw.startsWith('$') ? resolvePath(path) : /^([A-Za-z]:)?\//.test(path) ? absKey(path) : resolvePath(projDir, path);
+      if (key && !files.includes(key)) files.push(key);
+    }
+  }
+  const xprKey = resolvePath(projDir, xprFileName) ?? xprFileName;
+  let common = projDir.split('/');
+  for (const f of files) {
+    const segs = dirname(f).split('/');
+    let i = 0;
+    while (i < common.length && i < segs.length && common[i] === segs[i]) i++;
+    common = common.slice(0, i);
+  }
+  return { xprKey, files, folder: common.join('/') };
+}
+
+/** Where the folder the user picked sits among the project's paths, as a key. */
+export function placeFolder(needs: XprNeeds, pickedName: string): string {
+  const above = needs.folder.split('/');
+  for (let i = above.length; i > 0; i--) if (above[i - 1] === pickedName) return above.slice(0, i).join('/');
+  const below = dirname(needs.xprKey).split('/');
+  for (let i = below.length; i > above.length; i--) if (below[i - 1] === pickedName) return below.slice(0, i).join('/');
+  // Moved or renamed since Vivado saved it: take it as the folder we asked for.
+  return needs.folder;
+}
+
+export interface PickedFolder {
+  name: string;
+  /** File at a '/'-separated path inside the folder, or null if absent. */
+  read(rel: string): Promise<Uint8Array | null>;
+}
+
+/** Read the files the .xpr needs from the picked folder. */
+export async function folderSource(needs: XprNeeds, xprBytes: Uint8Array, picked: PickedFolder): Promise<Source> {
+  const root = placeFolder(needs, picked.name);
+  const prefix = root ? `${root}/` : '';
+  const found = new Map<string, Uint8Array>([[needs.xprKey, xprBytes]]);
+  for (const key of needs.files.slice(0, MAX_FILES * 4)) {
+    if (!key.startsWith(prefix)) continue; // above the picked folder: reported missing
+    const bytes = await picked.read(key.slice(prefix.length));
+    if (bytes) found.set(key, bytes);
+  }
+  return {
+    paths: [...found.keys()],
+    readMany: (wanted) => new Map(wanted.filter((p) => found.has(p)).map((p) => [p, found.get(p)!])),
+  };
+}
+
+/** Import a .xpr whose files come from a picked folder. */
+export async function importXprWithFolder(xprName: string, xprBytes: Uint8Array, picked: PickedFolder,
+  boards: BoardInfo[], currentBoard: string): Promise<ImportResult> {
+  const needs = xprNeeds(decode(xprBytes), xprName);
+  return importVivado(await folderSource(needs, xprBytes, picked), boards, currentBoard);
+}
+
 export function importVivado(src: Source, boards: BoardInfo[], currentBoard: string): ImportResult {
   const xprs = src.paths.filter((p) => ext(p) === '.xpr' && !p.startsWith('__MACOSX/'));
   if (!xprs.length) throw new Error('no Vivado project (.xpr) found');
@@ -268,12 +375,7 @@ export function importVivado(src: Source, boards: BoardInfo[], currentBoard: str
 
   const projDir = dirname(xprPath);
   const projName = basename(xprPath).slice(0, -4);
-  const vars: Record<string, string> = {
-    PPRDIR: projDir,
-    PSRCDIR: resolvePath(projDir, `${projName}.srcs`) ?? '',
-    PGENDIR: resolvePath(projDir, `${projName}.gen`) ?? '',
-    PIPUSERFILESDIR: resolvePath(projDir, `${projName}.ip_user_files`) ?? '',
-  };
+  const vars = xprVars(projDir, projName);
   const pathSet = new Set(src.paths);
   const byBase = new Map<string, string[]>();
   for (const p of src.paths) byBase.set(basename(p), [...(byBase.get(basename(p)) ?? []), p]);
@@ -304,11 +406,7 @@ export function importVivado(src: Source, boards: BoardInfo[], currentBoard: str
     return best;
   };
 
-  const set = (type: string, name?: string) =>
-    xpr.fileSets.find((s) => s.type === type && s.name === name) ?? xpr.fileSets.find((s) => s.type === type);
-  const design = set('DesignSrcs', xpr.srcSet);
-  const constrs = set('Constrs', xpr.constrsSet);
-  const sim = set('SimulationSrcs', xpr.simSet);
+  const { design, constrs, sim } = activeSets(xpr);
 
   const notes: VivadoNote[] = [];
   type Pick = { from: string; role: 'design' | 'xdc' | 'tb' };

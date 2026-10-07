@@ -25,7 +25,7 @@ import { subInterfaces } from './circuit/sim';
 import { generateVerilog } from './circuit/verilog';
 import { flash, webUsbSupported } from './flasher';
 import { exportZip, newProject, ProjectStore, type Project } from './project';
-import { importUpload, type VivadoNote } from './vivado';
+import { importUpload, importXprWithFolder, xprNeeds, type ImportResult, type PickedFolder, type VivadoNote, type XprNeeds } from './vivado';
 import { checkStem, FILE_KINDS, planNewFile, starterContent, type FileKind } from './newfile';
 import { detectOS, setupHelpHtml } from './setup-help';
 
@@ -276,6 +276,94 @@ function createNewFile() {
     scheduleSave();
   }
   openFile(name);
+}
+
+async function finishImport({ project: p, notes, vivado }: ImportResult) {
+  if (!boardInfo(p.board)) throw new Error(t('err.unknownBoard', { board: p.board }));
+  const fixed = fixTypography(p);
+  projectGen++;
+  await store.save(p);
+  await openProject(p);
+  if (vivado) {
+    appendLog(t('log.vivado.imported', { files: Object.keys(p.files).sort().join(', '), top: p.top }));
+    for (const n of notes) appendLog(vivadoNote(n));
+  }
+  if (fixed.length) appendLog(t('log.fixedQuotes', { files: fixed.join(', ') }));
+}
+
+// Import of a lone .xpr: say which folder holds its files, then read them from
+// the folder the user picks (File System Access API in Chrome/Edge, a
+// webkitdirectory upload elsewhere). Only the files the .xpr lists are read.
+let pendingXpr: { name: string; bytes: Uint8Array; needs: XprNeeds } | null = null;
+const MAX_READ_BYTES = 2_000_000;
+
+function askXprFolder(name: string, bytes: Uint8Array) {
+  const needs = xprNeeds(new TextDecoder().decode(bytes), name);
+  pendingXpr = { name, bytes, needs };
+  const folderName = needs.folder.split('/').pop() || '/';
+  const rel = (k: string) => (needs.folder ? k.slice(needs.folder.length + 1) : k);
+  $('xpr-body').replaceChildren();
+  const p = document.createElement('p');
+  const b = document.createElement('b');
+  b.textContent = folderName;
+  const [before, after] = t('xpr.needs', { n: needs.files.length, folder: '\u0000' }).split('\u0000');
+  p.append(before, b, after ?? '');
+  const hint = document.createElement('p');
+  hint.textContent = t('xpr.hint', { path: needs.folder ? `/${needs.folder}` : '/' });
+  const list = document.createElement('pre');
+  list.textContent = needs.files.map(rel).join('\n');
+  $('xpr-body').append(p, list, hint);
+  $<HTMLDialogElement>('xpr-dialog').showModal();
+}
+
+type DirPicker = (o?: { id?: string; mode?: 'read' }) => Promise<FileSystemDirectoryHandle>;
+
+async function chooseXprFolder() {
+  const picker = (window as unknown as { showDirectoryPicker?: DirPicker }).showDirectoryPicker;
+  if (!picker) return $<HTMLInputElement>('import-folder').click();
+  let dir: FileSystemDirectoryHandle;
+  try {
+    dir = await picker({ id: 'vivado', mode: 'read' });
+  } catch {
+    return; // cancelled
+  }
+  await importFromFolder({
+    name: dir.name,
+    async read(rel) {
+      try {
+        const parts = rel.split('/');
+        let d = dir;
+        for (const seg of parts.slice(0, -1)) d = await d.getDirectoryHandle(seg);
+        return readCapped(await (await d.getFileHandle(parts[parts.length - 1])).getFile());
+      } catch (e) {
+        if ((e as DOMException).name === 'NotFoundError' || (e as DOMException).name === 'TypeMismatchError') return null;
+        throw e;
+      }
+    },
+  });
+}
+
+async function readCapped(f: File): Promise<Uint8Array> {
+  if (f.size > MAX_READ_BYTES) throw new Error(t('xpr.tooBig', { name: f.name }));
+  return new Uint8Array(await f.arrayBuffer());
+}
+
+function webkitFolder(files: File[]): PickedFolder {
+  // webkitRelativePath is "<picked folder>/<path inside it>".
+  const byPath = new Map(files.map((f) => [f.webkitRelativePath.slice(f.webkitRelativePath.indexOf('/') + 1), f]));
+  const name = files[0].webkitRelativePath.split('/')[0];
+  return { name, read: async (rel) => (byPath.has(rel) ? readCapped(byPath.get(rel)!) : null) };
+}
+
+async function importFromFolder(folder: PickedFolder) {
+  const job = pendingXpr;
+  $<HTMLDialogElement>('xpr-dialog').close();
+  if (!job) return;
+  try {
+    await finishImport(await importXprWithFolder(job.name, job.bytes, folder, boards, project.board));
+  } catch (err) {
+    alert(t('alert.importFailed', { msg: (err as Error).message }));
+  }
 }
 
 /** Replace typographic quotes/dashes (from code copied out of PDFs/Word) in HDL files; returns the changed files. */
@@ -810,20 +898,20 @@ async function init() {
     if (!picked.length) return;
     try {
       const uploads = await Promise.all(picked.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
-      const { project: p, notes, vivado } = importUpload(uploads, boards, project.board);
-      if (!boardInfo(p.board)) throw new Error(t('err.unknownBoard', { board: p.board }));
-      const fixed = fixTypography(p);
-      projectGen++;
-      await store.save(p);
-      await openProject(p);
-      if (vivado) {
-        appendLog(t('log.vivado.imported', { files: Object.keys(p.files).sort().join(', '), top: p.top }));
-        for (const n of notes) appendLog(vivadoNote(n));
-      }
-      if (fixed.length) appendLog(t('log.fixedQuotes', { files: fixed.join(', ') }));
+      // A lone .xpr only lists paths: ask for the folder that holds the files.
+      if (uploads.length === 1 && /\.xpr$/i.test(uploads[0].name)) return askXprFolder(uploads[0].name, uploads[0].bytes);
+      await finishImport(importUpload(uploads, boards, project.board));
     } catch (err) {
       alert(t('alert.importFailed', { msg: (err as Error).message }));
     }
+  };
+  $('xpr-cancel').onclick = () => $<HTMLDialogElement>('xpr-dialog').close();
+  $('xpr-choose').onclick = () => void chooseXprFolder();
+  $<HTMLInputElement>('import-folder').onchange = (e) => {
+    const input = e.target as HTMLInputElement;
+    const files = [...(input.files ?? [])];
+    input.value = '';
+    if (files.length) void importFromFolder(webkitFolder(files));
   };
 
   const config = await fetchConfig().catch(() => ({ shares: false, turnstile_sitekey: '' }));

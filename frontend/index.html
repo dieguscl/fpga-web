@@ -144,8 +144,17 @@
       </div>
     </form>
   </dialog>
+  <dialog id="xpr-dialog">
+    <h3 data-i18n="xpr.title">Choose the project folder</h3>
+    <div id="xpr-body" class="xpr-body"></div>
+    <div class="newfile-actions">
+      <button type="button" class="btn-ghost" id="xpr-cancel" data-i18n="newfile.cancel">Cancel</button>
+      <button type="button" class="btn-primary" id="xpr-choose" autofocus data-icon="folder" data-i18n="xpr.choose">Choose folder</button>
+    </div>
+  </dialog>
   <dialog id="share-dialog"><div id="share-body"></div><form method="dialog"><button class="btn-ghost" data-i18n="btn.close">Close</button></form></dialog>
   <dialog id="setup-help" class="hex-crop"><div id="setup-help-body"></div><form method="dialog"><button class="btn-primary" data-i18n="btn.close">Close</button></form></dialog>
+  <input type="file" id="import-folder" webkitdirectory hidden />
   <input type="file" id="import-file" accept=".zip,.xpr,.v,.sv,.vh,.svh,.xdc,.mem,.hex" multiple hidden />
   <script type="module" src="/src/main.ts"></script>
 </body>

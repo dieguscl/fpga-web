@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import type { BoardInfo } from '../src/api';
 import { exportZip, newProject } from '../src/project';
-import { expandXdcWildcards, importUpload, parseXpr, partKey, pickBoard } from '../src/vivado';
+import { expandXdcWildcards, importUpload, importXprWithFolder, parseXpr, partKey, pickBoard, placeFolder, xprNeeds } from '../src/vivado';
 
 const board = (id: string, part: string) => ({ id, part, arch: 'xilinx' }) as BoardInfo;
 const BOARDS = [
@@ -290,5 +290,70 @@ describe('review fixes', () => {
   it('ignores commented-out ports when expanding wildcards', () => {
     const r = expandXdcWildcards('set_property PACKAGE_PIN U16 [get_ports {led[0]}]\n#set_property PACKAGE_PIN E19 [get_ports {led[1]}]\nset_property IOSTANDARD LVCMOS33 [get_ports {led[*]}]\n');
     expect(r.text).toBe('set_property PACKAGE_PIN U16 [get_ports {led[0]}]\n#set_property PACKAGE_PIN E19 [get_ports {led[1]}]\nset_property IOSTANDARD LVCMOS33 [get_ports {led[0]}]\n');
+  });
+});
+
+describe('importing a lone .xpr from a picked folder', () => {
+  const labXpr = xpr({
+    top: 'mux16',
+    srcs: [file('$PPRDIR/../../mux16/mux16.v'), file('$PPRDIR/../../mux4/mux4.v')],
+    xdcs: [file('$PPRDIR/../../mux16/mux16.xdc')],
+    sims: [file('$PPRDIR/../../mux16/mux16_teste1.v')],
+  }).replace('Path="/home/u/p/demo.xpr"', 'Path="/home/u/lab/vivado/mux16/mux16.xpr"');
+  const disk: Record<string, string> = {
+    'mux16/mux16.v': 'module mux16; mux4 a(); endmodule\n',
+    'mux4/mux4.v': 'module mux4; endmodule\n',
+    'mux16/mux16.xdc': '',
+    'mux16/mux16_teste1.v': 'module mux16_teste1; endmodule\n',
+  };
+  const folder = (name: string, files: Record<string, string>) => {
+    const reads: string[] = [];
+    return {
+      reads,
+      picked: { name, read: async (rel: string) => { reads.push(rel); return rel in files ? strToU8(files[rel]) : null; } },
+    };
+  };
+
+  it('works out the files and the folder that holds them all', () => {
+    const n = xprNeeds(labXpr, 'mux16.xpr');
+    expect(n.xprKey).toBe('home/u/lab/vivado/mux16/mux16.xpr');
+    expect(n.folder).toBe('home/u/lab');
+    expect(n.files).toEqual(['home/u/lab/mux16/mux16.v', 'home/u/lab/mux4/mux4.v', 'home/u/lab/mux16/mux16.xdc', 'home/u/lab/mux16/mux16_teste1.v']);
+  });
+
+  it('places the picked folder by name, at or above the asked folder', () => {
+    const n = xprNeeds(labXpr, 'mux16.xpr');
+    expect(placeFolder(n, 'lab')).toBe('home/u/lab');
+    expect(placeFolder(n, 'u')).toBe('home/u');
+    expect(placeFolder(n, 'mux16')).toBe('home/u/lab/vivado/mux16');
+    expect(placeFolder(n, 'renamed')).toBe('home/u/lab');
+  });
+
+  it('imports from the asked folder, reading only the needed files', async () => {
+    const f = folder('lab', disk);
+    const r = await importXprWithFolder('mux16.xpr', strToU8(labXpr), f.picked, BOARDS, 'icestick');
+    expect(Object.keys(r.project.files).sort()).toEqual(['mux16.v', 'mux16.xdc', 'mux16_teste1_tb.v', 'mux4.v']);
+    expect(r.project).toMatchObject({ name: 'mux16', top: 'mux16', board: 'basys3' });
+    expect(f.reads.sort()).toEqual(Object.keys(disk).sort());
+  });
+
+  it('imports from a folder further up', async () => {
+    const up = Object.fromEntries(Object.entries(disk).map(([k, v]) => [`lab/${k}`, v]));
+    const r = await importXprWithFolder('mux16.xpr', strToU8(labXpr), folder('u', up).picked, BOARDS, 'basys3');
+    expect(Object.keys(r.project.files)).toHaveLength(4);
+  });
+
+  it('reports files outside a too-deep folder as missing', async () => {
+    const own = folder('mux16', {});
+    await expect(importXprWithFolder('mux16.xpr', strToU8(labXpr), own.picked, BOARDS, 'basys3')).rejects.toThrow(/no Verilog design sources/);
+    expect(own.reads).toEqual([]);
+  });
+
+  it('handles projects whose sources live in .srcs', async () => {
+    const x = xpr({ srcs: [file('$PSRCDIR/sources_1/new/top.v')] }); // Path="/home/u/p/demo.xpr"
+    const n = xprNeeds(x, 'demo.xpr');
+    expect(n.folder).toBe('home/u/p');
+    const r = await importXprWithFolder('demo.xpr', strToU8(x), folder('p', { 'demo.srcs/sources_1/new/top.v': 'module top; endmodule\n' }).picked, BOARDS, 'basys3');
+    expect(Object.keys(r.project.files)).toEqual(['top.v']);
   });
 });
