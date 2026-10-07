@@ -9,8 +9,13 @@ test('new project starts empty unless the example is chosen', async ({ page }) =
   await page.click('#newproj-ok');
   await expect(page.locator('#file-list li')).toHaveCount(0);
   await expect(page.locator('#project')).toContainText('blank');
-  await page.click('#add-file');
+  // the new-file dialog opens by itself; closing it leaves a button in the editor's place
+  await expect(page.locator('#newfile-dialog')).toBeVisible();
+  await page.click('#newfile-cancel');
+  await expect(page.locator('#editor-empty')).toBeVisible();
+  await page.click('#empty-new-file');
   await page.click('#newfile-ok');
+  await expect(page.locator('#editor-empty')).toBeHidden();
   await expect(page.locator('#file-list')).toContainText('module1.v');
   await expect(page.locator('#top')).toHaveValue('module1');
 });

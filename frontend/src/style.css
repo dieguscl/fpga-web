@@ -271,6 +271,9 @@ main {
 #editor { flex: 1; min-height: 0; }
 #editor .cm-editor { height: 100%; }
 #editor[hidden], #planner[hidden] { display: none; }
+.editor-empty { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+.editor-empty[hidden] { display: none; }
+.editor-empty p { margin: 0; color: var(--hf-text-secondary); }
 
 /* ── Editor panel bar: Code | Waveform tabs, Board | Text for .xdc ─────── */
 .editor-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-right: 14px; }

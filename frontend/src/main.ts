@@ -452,7 +452,7 @@ function showView() {
   $('tab-code').classList.toggle('active', !wave && !vboard);
   $('tab-wave').classList.toggle('active', wave);
   if (vboard) {
-    for (const id of ['circuit', 'planner', 'editor', 'view-toggle']) $(id).hidden = true;
+    for (const id of ['circuit', 'planner', 'editor', 'editor-empty', 'view-toggle']) $(id).hidden = true;
     return;
   }
   const circuit = !wave && currentFile.endsWith('.circ');
@@ -461,7 +461,10 @@ function showView() {
   $('view-toggle').hidden = !usePlanner;
   const board = usePlanner && fileView === 'board';
   $('planner').hidden = !board;
-  $('editor').hidden = board || wave || circuit;
+  // No file open (empty project, or the last file deleted): offer to create one.
+  const none = !wave && currentFile === '';
+  $('editor-empty').hidden = !none;
+  $('editor').hidden = board || wave || circuit || none;
   if (wave) return;
   if (circuit) {
     const key = `${project.id}/${currentFile}`;
@@ -561,6 +564,7 @@ async function createProject(boardId: string, name?: string): Promise<boolean> {
   await store.save(p);
   if (gen !== projectGen) return false; // superseded while saving
   await openProject(p);
+  if (!choice.example) openNewFileDialog('module'); // nothing to edit yet: go straight to making a file
   return true;
 }
 
@@ -892,6 +896,7 @@ async function init() {
     if (p) await openProject(p);
   };
   $('add-file').onclick = () => openNewFileDialog('module');
+  $('empty-new-file').onclick = () => openNewFileDialog('module');
   document.querySelectorAll<HTMLButtonElement>('#mobile-nav [data-mview]').forEach((b) => {
     b.onclick = () => setMobileView(b.dataset.mview as MobileView);
   });
