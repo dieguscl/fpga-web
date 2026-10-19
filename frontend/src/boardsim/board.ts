@@ -263,8 +263,7 @@ export class VirtualBoard {
       this.ledEls[i].classList.toggle('vb-lit', f > 0.02);
     });
     digits.forEach((row, d) => row.forEach((f, k) => {
-      // multiplexed digits are lit ~1/4 of the time; scale so a fully driven digit looks fully on
-      const b = Math.min(1, f * 4);
+      const b = Math.min(1, f); // the worker reports brightness while the digit is selected
       const el = this.segEls[d][k];
       el.style.opacity = String(0.12 + 0.88 * b);
       el.classList.toggle('vb-lit', b > 0.05);

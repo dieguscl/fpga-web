@@ -230,6 +230,33 @@ test('virtual Basys 3: switches drive LEDs and the 7-segment display', async ({ 
   await expect(page.locator('.vb-led.vb-lit')).toHaveCount(2);
 });
 
+test('virtual Basys 3: a slowly multiplexed display shows all four digits at once', async ({ page }) => {
+  const { strToU8, zipSync } = await import('fflate');
+  const line = (pin: string, port: string) => `set_property -dict { PACKAGE_PIN ${pin} IOSTANDARD LVCMOS33 } [get_ports { ${port} }]\n`;
+  let xdc = line('W5', 'clk');
+  ['W7', 'W6', 'U8', 'V8', 'U5', 'V5', 'U7'].forEach((p, i) => (xdc += line(p, `seg[${i}]`)));
+  ['U2', 'U4', 'V4', 'W4'].forEach((p, i) => (xdc += line(p, `an[${i}]`)));
+  // A real-world refresh rate: each digit is on for 65536 cycles, longer than
+  // the sim gets through in one frame.
+  const v = `module top(input clk, output [6:0] seg, output reg [3:0] an);
+    reg [17:0] refresh = 0; always @(posedge clk) refresh <= refresh + 1;
+    assign seg = ~(7'b1 << refresh[17:16]); // digit d lights segment d
+    always @* begin an = 4'b1111; an[refresh[17:16]] = 1'b0; end
+  endmodule\n`;
+  const zip = zipSync({ 'project.json': strToU8(JSON.stringify({ name: 'vbmux', board: 'basys3', top: 'top' })), 'top.v': strToU8(v), 'basys3.xdc': strToU8(xdc) });
+  await page.goto('/');
+  await page.setInputFiles('#import-file', { name: 'vbmux.zip', mimeType: 'application/zip', buffer: Buffer.from(zip) });
+  await expect(page.locator('#file-list')).toContainText('top.v');
+  await page.click('#tab-board');
+  await page.click('button[data-i18n="vb.load"]');
+  await expect(page.locator('.vb-status')).toContainText('MHz', { timeout: 60_000 });
+  await expect(page.locator('.vb-seg.vb-lit')).toHaveCount(4, { timeout: 10_000 });
+  for (let i = 0; i < 10; i++) {
+    await page.waitForTimeout(100);
+    await expect(page.locator('.vb-seg.vb-lit')).toHaveCount(4, { timeout: 1 });
+  }
+});
+
 test('Tab indents the selected lines, Shift+Tab dedents them', async ({ page }) => {
   await page.goto('/');
   await page.click('#add-file');

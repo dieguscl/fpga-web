@@ -26,6 +26,17 @@ let watch: Watch | null = null;
 let running = false;
 let totalCycles = 0;
 const FRAME_MS = 33;
+// The eye holds a multiplexed digit for ~20 ms (2M cycles at 100 MHz). The
+// sim runs far slower than 100 MHz, so one frame may see only one digit;
+// keep each digit's last pattern for that long in simulated time.
+const PERSIST_CYCLES = 2_000_000;
+let held = [0, 1, 2, 3].map(() => new Array(8).fill(0));
+let heldAt = [0, 0, 0, 0].map(() => -Infinity); // cycle a digit was last selected
+
+function clearDigits(): void {
+  held = [0, 1, 2, 3].map(() => new Array(8).fill(0));
+  heldAt = [0, 0, 0, 0].map(() => -Infinity);
+}
 
 const post = (m: FromWorker) => (self as unknown as Worker).postMessage(m);
 
@@ -36,6 +47,7 @@ function loop(): void {
   let cycles = 0, samples = 0;
   const ledOn = new Array(16).fill(0);
   const segOn = [0, 1, 2, 3].map(() => new Array(8).fill(0));
+  const selected = [0, 0, 0, 0];
   let stride = 1;
   while (performance.now() - start < FRAME_MS - 5) {
     for (let i = 0; i < 256; i++) {
@@ -47,6 +59,7 @@ function loop(): void {
         for (let k = 0; k < 16; k++) if (w.leds[k] >= 0 && s.get(w.leds[k])) ledOn[k]++;
         for (let d = 0; d < 4; d++) {
           if (w.an[d] < 0 || s.get(w.an[d])) continue; // anode active low
+          selected[d]++;
           for (let k = 0; k < 8; k++) if (w.seg[k] >= 0 && !s.get(w.seg[k])) segOn[d][k]++;
         }
       }
@@ -55,10 +68,16 @@ function loop(): void {
   }
   const dt = (performance.now() - start) / 1000;
   totalCycles += cycles;
+  for (let d = 0; d < 4; d++) {
+    if (selected[d]) {
+      held[d] = segOn[d].map((n) => n / selected[d]); // brightness while selected
+      heldAt[d] = totalCycles;
+    } else if (totalCycles - heldAt[d] > PERSIST_CYCLES) held[d] = new Array(8).fill(0);
+  }
   post({
     type: 'frame',
     leds: ledOn.map((n) => n / Math.max(1, samples)),
-    digits: segOn.map((row) => row.map((n) => n / Math.max(1, samples))),
+    digits: held,
     rate: cycles / dt,
     cycles: totalCycles,
   });
@@ -73,6 +92,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
       sim = new NetSim(m.netlist as never, m.top);
       watch = m.watch;
       totalCycles = 0;
+      clearDigits();
       post({ type: 'loaded', gates: sim.gateCount, ffs: sim.ffCount });
     } else if (m.type === 'set' && sim) {
       sim.set(m.net, m.value);
@@ -86,6 +106,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
     else if (m.type === 'reset' && sim) {
       sim.reset();
       totalCycles = 0;
+      clearDigits();
     }
   } catch (err) {
     running = false;
