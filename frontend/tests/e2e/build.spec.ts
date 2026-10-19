@@ -257,6 +257,34 @@ test('virtual Basys 3: a slowly multiplexed display shows all four digits at onc
   }
 });
 
+test('panes resize by dragging, remember their width and reset on double-click', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/');
+  const files = page.locator('.panel-files'), output = page.locator('.panel-output'), editor = page.locator('.panel-editor');
+  const w = async (l: typeof files) => (await l.boundingBox())!.width;
+  const drag = async (pane: string, dx: number) => {
+    const b = (await page.locator(`.splitter[data-pane="${pane}"]`).boundingBox())!;
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(b.x + b.width / 2 + dx, b.y + b.height / 2, { steps: 5 });
+    await page.mouse.up();
+  };
+  const f0 = await w(files), o0 = await w(output);
+  await drag('files', 100);
+  expect(await w(files)).toBeCloseTo(f0 + 100, -1);
+  await drag('output', -150);
+  expect(await w(output)).toBeCloseTo(o0 + 150, -1);
+  await page.reload();
+  expect(await w(files)).toBeCloseTo(f0 + 100, -1);
+  expect(await w(output)).toBeCloseTo(o0 + 150, -1);
+  await drag('output', -2000); // can't squeeze the editor away
+  expect(await w(editor)).toBeGreaterThanOrEqual(320);
+  await page.locator('.splitter[data-pane="files"]').dblclick();
+  await page.locator('.splitter[data-pane="output"]').dblclick();
+  expect(await w(files)).toBeCloseTo(f0, -1);
+  expect(await w(output)).toBeCloseTo(o0, -1);
+});
+
 test('Tab indents the selected lines, Shift+Tab dedents them', async ({ page }) => {
   await page.goto('/');
   await page.click('#add-file');

@@ -232,10 +232,14 @@ main {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) minmax(320px, 36%);
-  gap: 2px;
+  grid-template-columns: var(--files-w, 220px) 6px minmax(0, 1fr) 6px var(--output-w, max(320px, 36%));
   background: var(--hf-surface-dim);
 }
+.splitter { cursor: col-resize; touch-action: none; position: relative; outline: none; }
+.splitter::after { content: ''; position: absolute; inset: 0 2px; border-radius: 2px; transition: background 0.15s; }
+.splitter:hover::after, .splitter:focus-visible::after, .splitter.dragging::after { background: var(--hf-primary); }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing iframe, body.resizing canvas { pointer-events: none; }
 .panel { min-height: 0; display: flex; flex-direction: column; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; }
 
@@ -550,6 +554,7 @@ dialog form { display: flex; justify-content: flex-end; margin-top: 16px; }
   select { max-width: 100%; }
   #project { max-width: 100%; }
   main { display: flex; flex-direction: column; gap: 2px; }
+  .splitter { display: none; }
   .panel { min-height: auto; }
   .panel-files { order: 1; max-height: 190px; }
   .panel-output { order: 2; }

@@ -28,6 +28,7 @@ import { exportZip, newProject, ProjectStore, type Project } from './project';
 import { importUpload, importXprWithFolder, xprNeeds, type ImportResult, type PickedFolder, type VivadoNote, type XprNeeds } from './vivado';
 import { checkStem, FILE_KINDS, planNewFile, starterContent, type FileKind } from './newfile';
 import { detectOS, setupHelpHtml } from './setup-help';
+import { initSplitters } from './splitter';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const store = new ProjectStore();
@@ -1021,4 +1022,5 @@ function initLanguage() {
 
 initSettings();
 initLanguage();
+initSplitters(document.querySelector('main')!);
 init().catch((e) => setStatus('status.loadFailed', { msg: String(e) }, 'err'));
