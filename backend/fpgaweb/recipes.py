@@ -184,8 +184,13 @@ def plan_netlist(board: Board, top: str, files: dict[str, str], settings: Settin
     if speedup not in SPEEDUPS:
         raise ValueError("invalid speed-up factor")
     srcs = _sources(files)
+    # Vendor primitives (FDCE, SB_DFF...) come from the simulation cell library:
+    # -defer elaborates only the cells the design uses, -nooverwrite keeps a
+    # project's own model of a primitive.
+    cells = str(settings.yosys_share / board.arch / "cells_sim.v")
     steps = [
         Step("elaborate", ["yosys", "-q", "-DSYNTHESIZE", "-p",
+                           f"read_verilog -defer -nooverwrite -DSYNTHESIZE {cells}; "
                            f"hierarchy -check -top {top}; proc; flatten; opt -full; memory; opt -full; write_json word.json",
                            *srcs]),
     ]

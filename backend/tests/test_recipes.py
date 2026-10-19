@@ -162,6 +162,7 @@ def test_plan_netlist(registry, settings):
     p = plan_netlist(registry.get("basys3"), "main", files, settings)
     assert [s.name for s in p.steps] == ["elaborate", "gates"] and p.output == "gate.json"
     assert "hierarchy -check -top main" in p.steps[0].argv[4] and p.steps[0].argv[-1] == "main.v"
+    assert f"read_verilog -defer -nooverwrite -DSYNTHESIZE {settings.yosys_share}/xilinx/cells_sim.v;" in p.steps[0].argv[4]
     assert "dffunmap" in p.steps[1].argv[3] and "write_json gate.json" in p.steps[1].argv[3]
     fast = plan_netlist(registry.get("basys3"), "main", files, settings, 1000)
     assert [s.name for s in fast.steps] == ["elaborate", "speed-up", "gates"]

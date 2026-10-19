@@ -128,3 +128,15 @@ async def test_netlist_for_virtual_board_with_speedup(manager):
     types = {c["type"] for c in cells}
     assert "$_DFF_P_" in types and types <= {"$_DFF_P_", "$_DFF_N_", "$_NOT_", "$_AND_", "$_OR_", "$_XOR_", "$_MUX_",
                                              "$_NAND_", "$_NOR_", "$_XNOR_", "$_ANDNOT_", "$_ORNOT_", "$_BUF_"}
+
+
+async def test_netlist_for_virtual_board_with_vendor_primitive(manager):
+    import json
+    reg = BoardRegistry(from_env().data_dir)
+    files = {"main.v": "module main(input clk, input btn, output led);\n"
+                       "FDCE ff(.Q(led), .C(clk), .CE(1'b1), .CLR(1'b0), .D(btn));\nendmodule\n"}
+    job = manager.submit("test", reg.get("basys3"), "main", files, False, kind="netlist")
+    events = [ev async for _, ev in job.stream()]
+    assert events[-1]["type"] == "done", [e for e in events if e["type"] in ("log", "error")][-20:]
+    types = {c["type"] for c in json.loads(job.bitstream.read_text())["modules"]["main"]["cells"].values()}
+    assert "$_DFF_P_" in types
